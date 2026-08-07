@@ -5,19 +5,15 @@
 #include <libultraship/bridge.h>
 #include "port/UI/cvar_prefixes.h"
 #include "port/Enhancements/Events/Hooks/Events.h"
+#include "port/Romhack/RomhackConfig.h"
 #include "port/ShipInit.hpp"
 #include "port/ShipUtils.h"
 
-extern "C" {
 #include "enums.h"
 #include "core2/statetimer.h"
+#include "core2/ba/physics.h"
 #include "bs_funcs.h"
 #include "functions.h"
-
-s32 port_getRomhackMaxEggs(void);
-s32 port_getRomhackMaxGoldFeathers(void);
-s32 port_getRomhackMaxRedFeathers(void);
-}
 
 // ============================================================================
 // CVAR DEFINITIONS
@@ -141,7 +137,7 @@ void RegisterTalonTrotCycle_Init() {
         // D-pad cycling - only works while Talon Trot is active
         if (bakey_pressed(BUTTON_D_RIGHT) || bakey_pressed(BUTTON_D_LEFT)) {
             s32 currentState = bs_getState();
-            bool inTalonTrot = bsbtrot_inSet((enum bs_e)currentState) || bslongleg_inSet(0); // Also in longleg state
+            bool inTalonTrot = bsbtrot_inSet(currentState) || bslongleg_inSet(currentState);
 
             if (inTalonTrot) {
                 bool inBoots = stateTimer_isActive(STATE_TIMER_2_LONGLEG);
@@ -184,23 +180,28 @@ void RegisterTalonTrotCycle_Init() {
 // MOVEMENT CHEATS
 // ============================================================================
 
-// Levitate — Hold L to float upward with gravity disabled
+// Levitate — Hold L to float straight up; tapping L out of a damaging fall cancels the fall.
 void RegisterLevitate_Init() {
+    static const f32 LEVITATE_VELOCITY = 500.0f;
     static bool levitateActive = false;
     COND_HOOK(GameFrameUpdate, EVENT_PRIORITY_NORMAL, CVarGetInteger(CVAR_LEVITATE, 0), [](IEvent* event) {
-        if (bakey_held(BUTTON_L)) {
-            baphysics_set_gravity(0.0f);
-            f32 pos[3];
-            player_getPosition(pos);
-            pos[1] += 20.0f;
-            player_setPosition(pos);
-            levitateActive = true;
-        } else {
-            // Only reset gravity once when L is released, not every frame
-            if (levitateActive) {
-                baphysics_reset_gravity();
-                levitateActive = false;
+        // Suspend levitation while dialog is up.
+        // Cancel fall damage and the tumble/splat animation if pressed mid-fall.
+        if (bakey_held(BUTTON_L) && !gcdialog_hasCurrentTextId()) {
+            if (bakey_pressed(BUTTON_L) && !player_isStable()) {
+                s32 fallDamage = 0;
+                if (bafalldamage_get_damage(&fallDamage) != 0) {
+                    bafalldamage_start();
+                    bs_setState(BS_1_IDLE);
+                }
             }
+            baphysics_set_gravity(0.0f);
+            baphysics_set_vertical_velocity(LEVITATE_VELOCITY);
+            levitateActive = true;
+        } else if (levitateActive) {
+            // Only reset gravity once when L is released, not every frame.
+            baphysics_reset_gravity();
+            levitateActive = false;
         }
     });
 }
@@ -209,9 +210,14 @@ void RegisterLevitate_Init() {
 // TRANSFORMATION CHEATS
 // ============================================================================
 
+static const s32 BAANIM_WISHYWASHY = 0x80;
+static bool isWishyWashyUnlocked() {
+    return (baanim_getActiveBottlesBonusMask() & BAANIM_WISHYWASHY) != 0;
+}
+
 // Transformation cycling with D-pad Up/Down
-// D-pad Up: Cycle forward through transformations (Banjo -> Mumbo -> Termite -> ... -> Wishy -> Banjo)
-// D-pad Down: Cycle backward through transformations (Banjo -> Wishy -> ... -> Termite -> Mumbo -> Banjo)
+// D-pad Up: Cycle forward through transformations (Banjo -> Termite -> ... -> Bee -> [Wishy] -> Banjo)
+// D-pad Down: Cycle backward through transformations (Banjo -> [Wishy] -> Bee -> ... -> Termite -> Banjo)
 void RegisterCycleTransform_Init() {
     COND_HOOK(GameFrameUpdate, EVENT_PRIORITY_NORMAL, CVarGetInteger(CVAR_CYCLE_TRANSFORM, 0), [](IEvent* event) {
         s32 currentTransform = (s32)player_getTransformation();
@@ -222,7 +228,10 @@ void RegisterCycleTransform_Init() {
             if (currentTransform > TRANSFORM_7_WISHWASHY) {
                 currentTransform = TRANSFORM_1_BANJO;
             }
-            func_8028FB88((enum transformation_e)currentTransform);
+            if (currentTransform == TRANSFORM_7_WISHWASHY && !isWishyWashyUnlocked()) {
+                currentTransform = TRANSFORM_1_BANJO; // skip Wishy Washy -> wrap to Banjo
+            }
+            player_transform((enum transformation_e)currentTransform);
         }
         // D-pad Down: Cycle backward through transformations
         else if (bakey_pressed(BUTTON_D_DOWN)) {
@@ -230,9 +239,54 @@ void RegisterCycleTransform_Init() {
             if (currentTransform < TRANSFORM_1_BANJO) {
                 currentTransform = TRANSFORM_7_WISHWASHY;
             }
-            func_8028FB88((enum transformation_e)currentTransform);
+            if (currentTransform == TRANSFORM_7_WISHWASHY && !isWishyWashyUnlocked()) {
+                currentTransform = TRANSFORM_6_BEE; // skip Wishy Washy -> step to Bee
+            }
+            player_transform((enum transformation_e)currentTransform);
         }
     });
+}
+
+// Copies of chMumbo_update state 5's 0.01 and 0.999 beats minus the audio; keep in step with it.
+extern "C" {
+void chMumbo_func_802D1B8C(Actor* actor, enum transformation_e transform_id);
+extern u8 D_8037DDF0; // the transformation this hut offers
+}
+
+static bool sMumboFastXformStarted = false;
+
+static bool FastTransform_startHutTransform(Actor* actor) {
+    if (actor->has_met_before || (actor->unk10_12 == 0 && (s32)player_getTransformation() != TRANSFORM_1_BANJO &&
+                                  (s32)player_getTransformation() != romhack_mumboWishwashyId())) {
+        return romhack_mumboTransform(TRANSFORM_1_BANJO);
+    }
+    if (romhack_mumboTransform(D_8037DDF0)) {
+        if (D_8037DDF0 != romhack_mumboWishwashyId()) {
+            enum file_progress_e paidFlag =
+                (enum file_progress_e)((D_8037DDF0 - TRANSFORM_2_TERMITE) + FILEPROG_90_PAID_TERMITE_COST);
+            if (fileProgressFlag_getAndSet(paidFlag, true)) {
+                actor->velocity[0] = 1.0f;
+            }
+            actor->unk38_31 = 0;
+        }
+        if (actor->unk10_12 == 1) {
+            actor->unk10_12 = 0;
+        }
+        return true;
+    }
+    return false;
+}
+
+// No has_met_before branch: those sequences are left to vanilla below.
+static void FastTransform_endHutTransform(Actor* actor) {
+    func_8028F918(0); // pops the look-at lock state 4 pushed
+    if ((s32)player_getTransformation() != TRANSFORM_1_BANJO) {
+        subaddie_set_state(actor, 3);
+        chMumbo_func_802D1B8C(actor, (enum transformation_e)D_8037DDF0);
+        return;
+    }
+    gcpausemenu_80314AC8(1);
+    subaddie_set_state(actor, 4);
 }
 
 // Fast Transformation — speeds up Mumbo transformation animation by 3x
@@ -248,6 +302,27 @@ void RegisterFastTransform_Init() {
             }
         }
     });
+
+    // Hut transforms ignore that timer; Mumbo's state 5 paces off his own 7.5s animation instead.
+    COND_VB_SHOULD(VB_MUMBO_HUT_TRANSFORM_CUTSCENE, EVENT_PRIORITY_NORMAL, CVarGetInteger(CVAR_FAST_TRANSFORM, 0), {
+        Actor* actor = va_arg(args, Actor*);
+        // T-Rex/mistake gags end in a dialog wired to a callback private to mumbo.c.
+        if (actor != nullptr && !actor->has_met_before) {
+            // Only latch once the spell has been accepted. Gags don't count as valid.
+            if (!sMumboFastXformStarted) {
+                sMumboFastXformStarted = FastTransform_startHutTransform(actor);
+            } else if (!baflag_isTrue(BA_FLAG_1B_TRANSFORMING)) {
+                // Safe to read as "the transformation ended" only because of the latch above.
+                sMumboFastXformStarted = false;
+                FastTransform_endHutTransform(actor);
+            }
+            *should = false;
+        }
+    });
+
+    // A map torn down mid-transform would leave the next one thinking it had already run.
+    COND_HOOK(OnMapLoad, EVENT_PRIORITY_NORMAL, CVarGetInteger(CVAR_FAST_TRANSFORM, 0),
+              [](IEvent* event) { sMumboFastXformStarted = false; });
 }
 
 // ============================================================================
@@ -256,12 +331,8 @@ void RegisterFastTransform_Init() {
 
 // Disable Mumbo untransform when going too far
 void RegisterNoMumboUntransform_Init() {
-    COND_HOOK(GameFrameUpdate, EVENT_PRIORITY_NORMAL, CVarGetInteger(CVAR_NO_MUMBO_UNTRANSFORM, 0), [](IEvent* event) {
-        // Prevent Mumbo from triggering untransform dialog/warn
-        // These functions check game state and show dialog
-        // We disable them by setting a flag they check
-        volatileFlag_set((enum volatile_flags_e)207, 1); // Prevents detransform warning
-    });
+    COND_VB_SHOULD(VB_MUMBO_DETRANSFORM, EVENT_PRIORITY_NORMAL, CVarGetInteger(CVAR_NO_MUMBO_UNTRANSFORM, 0),
+                   { *should = false; });
 }
 
 // ============================================================================
