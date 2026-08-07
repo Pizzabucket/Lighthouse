@@ -2,7 +2,8 @@
 #include <ultra64.h>
 #include "boot/overlaytable.h"
 #include "core1/core1.h"
-#include "checksums.h"
+#include "functions.h"
+#include "variables.h"
 
 extern u8  gHeapBase;
 extern u32 D_8027BF2C;
@@ -19,7 +20,7 @@ void overlay_load(
 #if 0
     void *compressed_buffer;
     u32 crc2, crc1;
-    struct overlay_checksums_s *checksums;
+    u32 *tmp;
 
     osWritebackDCacheAll();
     osInvalDCache(ram_start, ram_end - ram_start);
@@ -49,11 +50,11 @@ void overlay_load(
         bzero(bss_start, bss_end - bss_start);
         osWritebackDCacheAll();
 
-        checksums = (struct overlay_checksums_s *) bss_start;
-        checksums->text_checksum1 = crc1;
-        checksums->text_checksum2 = crc2;
-        checksums->data_checksum1 = D_8027BF2C;
-        checksums->data_checksum2 = D_8027BF30;
+        tmp = (u32*) bss_start;
+        tmp[0] = crc1;
+        tmp[1] = crc2;
+        tmp[2] = D_8027BF2C;
+        tmp[3] = D_8027BF30;
     }
 #endif
 }

@@ -1,6 +1,8 @@
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"
+
+#include "core2/quiz_storage.h"
 #include "port/Interpolation/FrameInterpolation.h"
 
 extern void func_8030DBFC(u32, f32, f32, f32);
@@ -37,7 +39,7 @@ Actor *chBeeSwarm_draw(ActorMarker *marker, Gfx **gfx, Mtx **mtx, Vtx **vtx);
 
 
 /* .data */
-ActorInfo chBeeSwarm = {
+ActorInfo D_80367310 = {
     MARKER_217_BEE_SWARM, ACTOR_34D_BEE_SWARM, ASSET_49E_SPRITE_BEE_SWARM, 
     1, NULL, 
     chBeeSwarm_update, NULL, chBeeSwarm_draw,
@@ -223,7 +225,7 @@ void chBeeSwarm_802CF1C8(f32 arg0[3], f32 arg1[3], f32 arg2[3], f32 arg3, f32 ar
     }
     if (arg5 != 0) {
         sp3C[0] = sp3C[1] = sp3C[2] = 0.0f;
-        ml_horizontal_and_vertical_angles(arg2[0], arg2[1], arg2[2], sp3C[0], sp3C[1], sp3C[2], arg5, arg5 + 1);
+        func_8025727C(arg2[0], arg2[1], arg2[2], sp3C[0], sp3C[1], sp3C[2], arg5, arg5 + 1);
     }
 }
 
@@ -449,7 +451,7 @@ void chBeeSwarm_update(Actor *this) {
         if (!fileProgressFlag_get(FILEPROG_8F_MET_BEE_INFESTED_BEEHIVE) && subaddie_playerIsWithinCylinder(this, 250, 300) 
             && ((player_movementGroup() == BSGROUP_0_NONE) || (player_movementGroup() == BSGROUP_8_TROT)) 
             && (player_getTransformation() == TRANSFORM_1_BANJO) 
-            && (gcdialog_showDialog(VER_SELECT(0xDA6, 0xA24, 0, 0), 0, NULL, NULL, NULL, NULL) != 0)
+            && (gcdialog_showDialog(0xDA6, 0, NULL, NULL, NULL, NULL) != 0)
         ) {
             fileProgressFlag_set(FILEPROG_8F_MET_BEE_INFESTED_BEEHIVE, true);
         }

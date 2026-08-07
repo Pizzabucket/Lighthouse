@@ -5,7 +5,17 @@
 #include "spdlog/spdlog.h"
 #include "enums.h"
 
-#include "functions.h"
+extern "C" {
+s32 getGameMode(void);
+void mapSpecificFlags_set(s32 i, s32 val);
+s32 mapSpecificFlags_get(s32 i);
+
+enum map_e gsworld_getMap(void);
+enum level_e map_getLevel(enum map_e map);
+
+Struct70s* func_8034C5AC(s32 arg0);
+void func_8034E71C(Struct73s* arg0, s32 arg1, f32 arg2);
+}
 
 // These read per-file save data, so they must not be evaluated before a file is selected.
 #define EMPTY_HONEYCOMB_OPTION_ENABLED \
@@ -31,8 +41,8 @@ void Rando::StaticData::ModifyRandoInfFlagState(RandoCheckId randoCheckId) {
             break;
         case RC_GV_JIGGY_WATER_PYRAMID:
         case RC_GV_MUMBO_TOKEN_INSIDE_WATER_PYRAMID:
-            if (RANDO_SAVE_CHECKS[RC_GV_JIGGY_WATER_PYRAMID].eligible &&
-                RANDO_SAVE_CHECKS[RC_GV_MUMBO_TOKEN_INSIDE_WATER_PYRAMID].eligible) {
+            if (RANDO_SAVE_CHECKS[RC_GV_JIGGY_WATER_PYRAMID].obtained &&
+                RANDO_SAVE_CHECKS[RC_GV_MUMBO_TOKEN_INSIDE_WATER_PYRAMID].obtained) {
                 randoInfFlag = RANDO_INF_WATER_PYRAMID_DRAINED;
             }
             break;
@@ -96,18 +106,18 @@ void Rando::MiscBehavior::InitWorldStateBehavior() {
 
         switch (currentLevel) {
             case LEVEL_1_MUMBOS_MOUNTAIN:
-                if (RANDO_SAVE_CHECKS[RC_MM_JIGGY_CHIMPY].eligible) {
+                if (RANDO_SAVE_CHECKS[RC_MM_JIGGY_CHIMPY].obtained) {
                     if (ev->actorId == ACTOR_F_CHIMPY) {
                         event->Cancelled = true;
                         ev->result = NULL;
                     }
                 }
                 mapSpecificFlags_set(MM_SPECIFIC_FLAG_0_CHIMPY_STUMP_RAISED,
-                                     RANDO_SAVE_CHECKS[RC_MM_JIGGY_CHIMPY].eligible);
+                                     RANDO_SAVE_CHECKS[RC_MM_JIGGY_CHIMPY].obtained);
                 mapSpecificFlags_set(MM_SPECIFIC_FLAG_2_ORANGE_HAS_BEEN_RETURNED,
-                                     RANDO_SAVE_CHECKS[RC_MM_JIGGY_CHIMPY].eligible);
+                                     RANDO_SAVE_CHECKS[RC_MM_JIGGY_CHIMPY].obtained);
                 mapSpecificFlags_set(MM_SPECIFIC_FLAG_3_CHIMPY_HAS_LEFT,
-                                     RANDO_SAVE_CHECKS[RC_MM_JIGGY_CHIMPY].eligible);
+                                     RANDO_SAVE_CHECKS[RC_MM_JIGGY_CHIMPY].obtained);
                 break;
             case LEVEL_3_CLANKERS_CAVERN:
                 if (currentMap == MAP_22_CC_INSIDE_CLANKER &&
@@ -117,11 +127,11 @@ void Rando::MiscBehavior::InitWorldStateBehavior() {
                 break;
             case LEVEL_9_RUSTY_BUCKET_BAY:
                 if (ev->actorId == 0x18F) {
-                    mapSpecificFlags_set(0, RANDO_SAVE_CHECKS[RC_RBB_EMPTY_HONEYCOMB_BOAT_HOUSE].eligible);
+                    mapSpecificFlags_set(0, RANDO_SAVE_CHECKS[RC_RBB_EMPTY_HONEYCOMB_BOAT_HOUSE].obtained);
                 }
                 break;
             case LEVEL_A_MAD_MONSTER_MANSION:
-                if (ev->actorId == ACTOR_39_NAPPER && RANDO_SAVE_CHECKS[RC_MMM_JIGGY_MANSION_TABLE].eligible) {
+                if (ev->actorId == ACTOR_39_NAPPER && RANDO_SAVE_CHECKS[RC_MMM_JIGGY_MANSION_TABLE].obtained) {
                     event->Cancelled = true;
                     ev->result = NULL;
                 }
@@ -155,7 +165,7 @@ void Rando::MiscBehavior::InitWorldStateBehavior() {
                     if (currentMap == MAP_26_MMM_NAPPERS_ROOM &&
                         randoSaveCheck.randoCheckId != RC_MMM_JIGGY_MANSION_TABLE) {
                         event->Cancelled = true;
-                        ev->result = RANDO_SAVE_CHECKS[RC_MMM_JIGGY_MANSION_TABLE].eligible;
+                        ev->result = RANDO_SAVE_CHECKS[RC_MMM_JIGGY_MANSION_TABLE].obtained;
                         break;
                     }
                 }
@@ -169,20 +179,13 @@ void Rando::MiscBehavior::InitWorldStateBehavior() {
                 if (ev->jiggyId == JIGGY_2E_FP_PRESENTS) {
                     if (currenLevel == LEVEL_5_FREEZEEZY_PEAK) {
                         event->Cancelled = true;
-                        ev->result = RANDO_SAVE_CHECKS[RC_FP_JIGGY_IGLOO].eligible;
-                        break;
-                    }
-                }
-                if (ev->jiggyId == JIGGY_37_LAIR_BGS_WITCH_SWITCH) {
-                    if (currenLevel == LEVEL_6_LAIR) {
-                        event->Cancelled = true;
-                        ev->result = RANDO_SAVE_CHECKS[RC_GL_JIGGY_WITCH_SWITCH_BUBBLEGLOOP_SWAMP].eligible;
+                        ev->result = RANDO_SAVE_CHECKS[RC_FP_JIGGY_IGLOO].obtained;
                         break;
                     }
                 }
 
                 event->Cancelled = true;
-                ev->result = randoSaveCheck.eligible;
+                ev->result = randoSaveCheck.obtained;
                 break;
             }
         }
@@ -202,27 +205,11 @@ void Rando::MiscBehavior::InitWorldStateBehavior() {
             if (randoCheckId == RC_MMM_JIGGY_TUMBLARS_PUZZLE) {
                 ev->result = mapSpecificFlags_get(MMM_SPECIFIC_FLAG_TUMBLAR_BROKEN);
             } else if (randoCheckId == RC_CC_JIGGY_CLANKER_RAISED) {
-                // Clanker's height and his rings' water level are both recalled from
-                // this query, so it has to answer for the world event and not just
-                // for a reward still sitting in the level.
-                ev->result = RANDO_SAVE_FLAGS[RANDO_INF_CLANKER_RAISED].flagState ||
-                             CustomObject::CheckSpawnedIdList(randoCheckId);
-            } else if (randoCheckId == RC_CC_JIGGY_RINGS) {
-                ev->result = RANDO_SAVE_FLAGS[RANDO_INF_MINIGAME_RINGS_COMPLETED].flagState ||
-                             CustomObject::CheckSpawnedIdList(randoCheckId);
+                ev->result = RANDO_SAVE_FLAGS[RANDO_INF_CLANKER_RAISED].flagState;
             } else {
-                ev->result = CustomObject::CheckSpawnedIdList(randoCheckId) || RANDO_SAVE_CHECKS[randoCheckId].eligible;
+                ev->result = CustomObject::CheckSpawnedIdList(randoCheckId);
             }
         }
-    })
-
-    // Drop the id-keyed requirement for the MMM floorboard honeycomb (marker.c)
-    COND_VB_SHOULD(VB_HONEYCOMB_PUMPKIN_REQUIREMENT, EVENT_PRIORITY_NORMAL, true, {
-        (void)args;
-        if (!IS_RANDO || !EMPTY_HONEYCOMB_OPTION_ENABLED) {
-            return;
-        }
-        *should = false;
     })
 
     REGISTER_LISTENER(OnIsHoneycombScoreCollected, EVENT_PRIORITY_NORMAL, [](IEvent* event) {
@@ -249,7 +236,7 @@ void Rando::MiscBehavior::InitWorldStateBehavior() {
                 if (ev->honeycombId == HONEYCOMB_17_SM_COLLIWOBBLE) {
                     ev->result = false;
                 } else {
-                    ev->result = saveCheck.eligible;
+                    ev->result = saveCheck.obtained;
                 }
 
                 break;
@@ -277,7 +264,7 @@ void Rando::MiscBehavior::InitWorldStateBehavior() {
 
             if (saveCheck.randoCollectionId == ev->tokenId) {
                 event->Cancelled = true;
-                ev->result = saveCheck.eligible;
+                ev->result = saveCheck.obtained;
                 break;
             }
         }

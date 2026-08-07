@@ -7,13 +7,7 @@ namespace Lighthouse {
 static constexpr const char* kVanillaLabel = "Vanilla";
 
 std::string CurrentRomhackLabel() {
-    if (!port_isRomhack()) {
-        return kVanillaLabel;
-    }
-    if (const char* id = port_getRomhackIdentifier()) {
-        return id;
-    }
-    return port_getRomhackName();
+    return port_isRomhack() ? port_getRomhackName() : kVanillaLabel;
 }
 
 std::string DescribeRomhackMismatch(bool localIsRomhack, const std::string& localLabel, bool remoteIsRomhack,

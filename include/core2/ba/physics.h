@@ -3,11 +3,6 @@
 
 #include <ultra64.h>
 #include "libultraship/libultra/types.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef enum ba_physics_type_e{
     BA_PHYSICS_NONE,
     BA_PHYSICS_UNK1,
@@ -55,9 +50,4 @@ void baphysics_set_gravity(f32);
 void baphysics_set_terminal_velocity(f32);
 int  baphysics_is_slower_than(f32);
 int  baphysics_goto_done(void);
-
-#ifdef __cplusplus
-}
-#endif
-
 #endif

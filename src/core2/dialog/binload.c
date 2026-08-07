@@ -1,10 +1,10 @@
-// BanjoDecomp: core2/code_94620.c
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"
 #include "structs.h"
 #include "port/Patches/Patches.h"
-#include "port/ResourceHelpers.h"
+
+extern int ResourceMgr_GetDialogLanguageCount(void);
 
 /* .bss */
 s32 D_80383150;
@@ -19,7 +19,6 @@ s32 code94620_func_8031B5B0(void) {
     return s_dialogBin.unk0;
 }
 
-// s32 func_8031B5BC(void){ return VER_SELECT(1, 3, 0, 0); }
 s32 func_8031B5BC(void){ return ResourceMgr_GetDialogLanguageCount(); }
 
 void func_8031B5C4(s32 arg0) {

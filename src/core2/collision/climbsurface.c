@@ -1,4 +1,3 @@
-// BanjoDecomp: core2/code_C4B0.c
 #include <ultra64.h>
 #include "core1/core1.h"
 #include "functions.h"
@@ -62,8 +61,8 @@ s32 D_8037C284;
 /* .code */
 void func_80293440(void){
      f32 sp34[3];
-     f32 bottomY = climb_getBottomY();
-     f32 topY = climb_getTopY();
+     f32 bottomY = climbGetBottomY();
+     f32 topY = climbGetTopY();
      f32 sp28;
      f32 diff;
 
@@ -73,7 +72,7 @@ void func_80293440(void){
      if(D_8037C218[1] < bottomY)
           D_8037C218[1] = bottomY;
 
-     climb_getBottom(sp34);
+     climbGetBottom(sp34);
      func_80257F18(D_8037C218, sp34, &sp28);
      diff = mlDiffDegF(sp28, yaw_get());
      diff = mlAbsF(diff);
@@ -298,7 +297,7 @@ void func_80293F0C(void){
     f32 sp38[3];
     f32 sp2C[3];
     
-    playerPosition_get(sp44);
+    _player_getPosition(sp44);
     if(gsworld_getMap() == MAP_34_RBB_ENGINE_ROOM && ml_vec3f_inside_box_f(sp44, -900.0f, -940.0f, 200.0f, 900.0f, 940.0f, 800.0f)){
         func_8031C5FC(D_8037C200, 150.0f);
     } else{
@@ -317,7 +316,7 @@ void func_80293F0C(void){
         case 1:
         case 3:
         case 4:
-            playerPosition_get(D_8037C218);
+            _player_getPosition(D_8037C218);
             playerPosition_func_80298504(D_8037C228);
             ml_vec3f_diff_copy(D_8037C238, D_8037C218, D_8037C228);
             if ((D_8037C274 == 3) && func_8031C594(D_8037C200) && (D_8037C218[1] > (floor_getYPosition(D_8037C200) - 70.0f))) {
@@ -326,15 +325,15 @@ void func_80293F0C(void){
                 baphysics_set_vertical_velocity(1.0f);
             }
             func_80293668();
-            playerPosition_set(D_8037C218);
+            player_setPosition(D_8037C218);
             break;
 
         case 5:
-            playerPosition_get(D_8037C218);
+            _player_getPosition(D_8037C218);
             playerPosition_func_80298504(D_8037C228);
             func_80293668();
             func_80293440();
-            playerPosition_set(D_8037C218);
+            player_setPosition(D_8037C218);
             break;
 
         case 2:
@@ -365,7 +364,7 @@ void func_80293F0C(void){
     }
 
     if (D_8037C27F) {
-        playerPosition_set(sp44);
+        player_setPosition(sp44);
     }
 
     D_8037C27A = 0;
@@ -376,7 +375,7 @@ void func_80293F0C(void){
         D_8037C280 = 0;
     }
     playerPosition_func_80298504(sp2C);
-    playerPosition_get(sp38);
+    _player_getPosition(sp38);
     ml_vec3f_diff_copy(D_8037C268, sp38, sp2C);
     if (D_8037C204) {
         collisionTri_copy(&D_8037C208, D_8037C204);
@@ -413,7 +412,7 @@ void func_80294390(void) {
 }
 
 f32 func_80294404(void){
-     return playerPosition_getY() - floor_getXPosition(D_8037C200);
+     return player_getYPosition() - floor_getXPosition(D_8037C200);
 }
 
 f32 func_80294438(void){

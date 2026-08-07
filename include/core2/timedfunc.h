@@ -4,9 +4,7 @@
 
 #include "generic.h"
 
-#ifndef __cplusplus
 #define reinterpret_cast(type, var) (*((type *)&var))
-#endif
 
 
 void timedFunc_set_0(f32 time, GenFunction_0 funcPtr);

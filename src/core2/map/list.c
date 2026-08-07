@@ -1,4 +1,3 @@
-// BanjoDecomp: core2/code_12F30.c
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"
@@ -126,7 +125,7 @@ void func_80299EC0(f32 arg0[3]) {
     } else {
         sp78 = 250;
     }
-    playerPosition_get(spEC);
+    _player_getPosition(spEC);
     sp6C = func_8029463C();
     spC8 = func_802946A8();
     if (spC8 == NULL) {

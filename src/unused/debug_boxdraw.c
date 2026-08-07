@@ -1,4 +1,4 @@
-// BanjoDecomp: core1/stub_3A70.c
+// BanjoDecomp: (unknown decomp origin - unused debug drawing)
 #include <ultra64.h>
 #include "core1/core1.h"
 #include "functions.h"

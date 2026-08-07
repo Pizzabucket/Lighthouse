@@ -20,27 +20,33 @@ enum map_e gsworld_getMap(void);
 // Demo Display Pacing
 
 static int sDemoViCount = 0;
-static constexpr int kMaxDemoViCount = 0xF;
 
 int port_getDemoViCount(void) {
     return sDemoViCount;
 }
 
 void port_setDemoViCount(int viCount) {
-    sDemoViCount = (viCount > kMaxDemoViCount) ? kMaxDemoViCount : viCount;
+    sDemoViCount = viCount;
 }
 
 int port_getDemoDisplayViCount(int rawViCount) {
-    if (getGameMode() == GAME_MODE_A_SNS_PICTURE) {
+    int displayViCount = rawViCount;
+    int game_mode = getGameMode();
+
+    if (game_mode == GAME_MODE_8_BOTTLES_BONUS) {
+        displayViCount = 3;
+    } else if (game_mode == GAME_MODE_A_SNS_PICTURE) {
         switch (gsworld_getMap()) {
             case MAP_7F_FP_WOZZAS_CAVE:
             case MAP_92_GV_SNS_CHAMBER:
-                return 3;
+                displayViCount = 3;
+                break;
             default:
                 break;
         }
     }
-    return rawViCount;
+
+    return displayViCount;
 }
 
 // Cutscene Stutter Compensation
@@ -56,7 +62,6 @@ static int sLairDingpotDurations[] = { 6, 5, 5, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
 static int sCutsceneCounter = 0;
 static int sCutsceneNextStutter = 0;
 static int sCutsceneLagIndex = 0;
-static int sCutsceneExtraVis = 0;
 
 static bool shouldLagCutscene(int* startFrames, int* durations, int count) {
     if (sCutsceneNextStutter == -1) {
@@ -88,40 +93,47 @@ static void resetCutsceneTimings(void) {
     sCutsceneCounter = 0;
     sCutsceneNextStutter = 0;
     sCutsceneLagIndex = 0;
-    sCutsceneExtraVis = 0;
 }
 
-// Advances the stutter tables by one cutscene frame. Called from func_802E4384,
-// the single point where a tick commits its time delta, so every consumer of
-// port_getCutsceneExtraVis() sees the same answer for that tick.
-void port_tickCutsceneStutter(void) {
-    sCutsceneExtraVis = 0;
-
+int port_getCutsceneExtraVis(void) {
     if (!CVarGetInteger(CVAR_CUTSCENE_SYNC, 1))
-        return;
+        return 0;
+
+    int extra = 0;
 
     switch (gsworld_getMap()) {
         case MAP_1E_CS_START_NINTENDO:
             if (shouldLagCutscene(sConcertStartFrames, sConcertDurations,
                                   (int)(sizeof(sConcertStartFrames) / sizeof(sConcertStartFrames[0])))) {
-                sCutsceneExtraVis = 1;
+                extra = 1;
             }
             sCutsceneCounter++;
             break;
         case MAP_7B_CS_INTRO_GL_DINGPOT_1:
             if (shouldLagCutscene(sLairDingpotStartFrames, sLairDingpotDurations,
                                   (int)(sizeof(sLairDingpotStartFrames) / sizeof(sLairDingpotStartFrames[0])))) {
-                sCutsceneExtraVis = 1;
+                extra = 1;
             }
             sCutsceneCounter++;
             break;
         default:
             break;
     }
+
+    return extra;
 }
 
-int port_getCutsceneExtraVis(void) {
-    return sCutsceneExtraVis;
+int port_getInterpolationFpsCap(void) {
+    if (!CVarGetInteger(CVAR_CUTSCENE_SYNC, 1))
+        return 0;
+
+    switch (gsworld_getMap()) {
+        // [port] Cap concert to 30 fps
+        case MAP_1E_CS_START_NINTENDO:
+            return 30;
+        default:
+            return 0;
+    }
 }
 
 } // extern "C"

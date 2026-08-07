@@ -3,11 +3,12 @@
 #include "port/Enhancements/Events/Hooks/Events.h"
 #include "port/ShipInit.hpp"
 #include "port/Romhack/RomhackConfig.h"
-#include "port/Rando/Rando.h"
 
+extern "C" {
 #include "enums.h"
 #include "functions.h"
 #include "core2/abilityprogress.h"
+}
 
 extern "C" float D_80386000[];
 
@@ -35,23 +36,20 @@ void RegisterSkipSMTutorial_Init() {
         }
         auto* ev = reinterpret_cast<OnNewGame*>(event);
 
-        if (!IS_RANDO) {
-            for (ability_e ability : kSpiralMountainAbilities) {
-                ability_unlock(ability);
-            }
-
-            for (ability_used move : kSpiralMountainUsedMoves) {
-                ability_setHasUsed(static_cast<ability_e>(move));
-            }
-
-            for (int honeycomb = HONEYCOMB_13_SM_STUMP; honeycomb <= HONEYCOMB_18_SM_QUARRIES; honeycomb++) {
-                honeycombscore_set((honeycomb_e)honeycomb, true);
-            }
-            func_8034789C();
-            item_adjustByDiffWithoutHud(ITEM_14_HEALTH,
-                                        item_getCount(ITEM_15_HEALTH_TOTAL) - item_getCount(ITEM_14_HEALTH));
+        for (ability_e ability : kSpiralMountainAbilities) {
+            ability_unlock(ability);
         }
 
+        for (ability_used move : kSpiralMountainUsedMoves) {
+            ability_setHasUsed(static_cast<ability_e>(move));
+        }
+
+        for (int honeycomb = HONEYCOMB_13_SM_STUMP; honeycomb <= HONEYCOMB_18_SM_QUARRIES; honeycomb++) {
+            honeycombscore_set((honeycomb_e)honeycomb, true);
+        }
+        func_8034789C();
+        item_adjustByDiffWithoutHud(ITEM_14_HEALTH,
+                                    item_getCount(ITEM_15_HEALTH_TOTAL) - item_getCount(ITEM_14_HEALTH));
         fileProgressFlag_set(FILEPROG_BD_ENTER_LAIR_CUTSCENE, 1);
         D_80386000[LEVEL_B_SPIRAL_MOUNTAIN] = 122.0f; // Average speedrun time for SM completion (2:02)
 

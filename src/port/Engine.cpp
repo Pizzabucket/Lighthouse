@@ -1,9 +1,7 @@
 #include "Engine.h"
-#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <chrono>
-#include <future>
 #if defined(__linux__) || defined(__APPLE__)
 #include <unistd.h>
 #include <cerrno>
@@ -33,10 +31,8 @@
 #include "Audio/GameAudio.h"
 #include "build.h"
 #include "Extractor/GameExtractor.h"
-#include "ship/window/gui/FileBrowserWindow.h"
+#include "Interpolation/AdaptiveFps.h"
 #include "Interpolation/FrameInterpolation.h"
-#include "Nametag/Nametag.h"
-#include "OS/OS.h"
 #include "Network/Anchor/Anchor.h"
 #include "port/Enhancements/Events/PortEnhancements.h"
 #include "port/Patches/Patches.h"
@@ -53,7 +49,6 @@
 #include "src/port/Enhancements/Events/Hooks/Events.h"
 #include "UI/LighthouseGui.hpp"
 #include "UI/LighthouseModMenuWindow.h"
-#include "LaunchArgs.h"
 
 #ifdef __SWITCH__
 #include <port/switch/SwitchImpl.h>
@@ -76,6 +71,14 @@ extern s32 D_80275610;
 
 bool prevAltAssets = false;
 // bool gEnableGammaBoost = true;
+
+// Audio synthesis entry point (decomp n_synthesizer.c)
+Acmd* n_alAudioFrame(Acmd* cmdList, s32* cmdLen, s16* outBuf, s32 outLen);
+// DMA cache cleanup (decomp audio_manager.c)
+void func_802403F0(void);
+void func_80250650(void);
+// Game mode helper
+bool func_802E4A08(void);
 
 // Soundfont ROM symbols — loaded from OTR in LoadSoundfonts()
 u8* soundfont1ctl_ROM_START = NULL;
@@ -120,9 +123,10 @@ OTRVersion ReadPortVersionFromOTR(std::string otrPath) {
     return version;
 }
 
-// Reads the port version recorded in the named o2r. A missing file yields INT16_MAX in every
-// field; an o2r that opens without a portVersion record yields zeros.
+// Checks the program version stored in the otr and compares the major value to soh
+// For Windows/Mac/Linux if the version doesn't match, offer to
 OTRVersion DetectOTRVersion(std::string fileName) {
+    bool isOtrOld = false;
     std::string otrPath = Ship::Context::LocateFileAcrossAppDirs(fileName);
 
     // Doesn't exist so nothing to do here
@@ -178,7 +182,6 @@ GameEngine::GameEngine() {
 
     lhFast3dWindow = std::make_shared<Fast::Fast3dWindow>(std::vector<std::shared_ptr<Ship::GuiWindow>>({}));
     this->context->InitWindow(lhFast3dWindow);
-    this->context->InitAudio({ .SampleRate = 22000, .SampleLength = 736, .DesiredBuffered = 2208 });
 
     LighthouseGui::SetupMenu();
 
@@ -209,7 +212,6 @@ typedef enum PromptSteps {
     PS_FILE_CHECK,
     PS_LOCAL,
     PS_FIRST,
-    PS_FIRST_WAIT, // waiting for the async file-pick result (resolves immediately on the native path)
     PS_WAIT,
     PS_NONE,
 } PromptSteps;
@@ -226,7 +228,7 @@ bool IsSubpath(const std::filesystem::path& path, const std::filesystem::path& b
     return !rel.empty() && rel.native()[0] != '.';
 }
 
-bool PathTestCleanup() {
+bool PathTestCleanup(FILE* tfile) {
     try {
         if (std::filesystem::exists("./text.txt"))
             std::filesystem::remove("./text.txt");
@@ -246,8 +248,7 @@ void CheckAndCreateModFolder() {
             if (std::filesystem::create_directories(modsPath)) {
                 std::ofstream(filePath).close();
                 std::filesystem::create_directories(modsPath + "/~romhacks"); // BK romhacks go here
-                std::filesystem::create_directories(modsPath + "/~lang");     // Language packs go here
-                std::filesystem::create_directories(modsPath + "/~shared");   // Mods usable by everything go here
+                std::filesystem::create_directories(modsPath + "/shared");    // Mods usable by everything go here
             }
         }
     } catch (std::filesystem::filesystem_error const&) {
@@ -326,7 +327,7 @@ static void LoadLooseModDirectories(const std::string& patches_path) {
             continue;
         }
         const std::string dirName = p.path().filename().generic_string();
-        if (dirName == "~romhacks" || dirName == "~shared" || dirName == "~lang" || IsScopedModFolderName(dirName)) {
+        if (dirName == "~romhacks" || dirName == "shared" || dirName == "lang" || IsScopedModFolderName(dirName)) {
             continue;
         }
         SPDLOG_INFO("Found mod directory: {}", p.path().generic_string());
@@ -335,9 +336,9 @@ static void LoadLooseModDirectories(const std::string& patches_path) {
     }
 }
 
-// Load every .o2r language pack from mods/~lang into the ArchiveManager.
+// Load every .o2r language pack from mods/lang into the ArchiveManager.
 static void LoadLanguagePacks() {
-    const std::string lang_path = Ship::Context::GetPathRelativeToAppDirectory("mods/~lang");
+    const std::string lang_path = Ship::Context::GetPathRelativeToAppDirectory("mods/lang");
     if (lang_path.empty() || !std::filesystem::is_directory(lang_path)) {
         return;
     }
@@ -363,9 +364,6 @@ void GameEngine::FinishInit() {
         std::filesystem::create_directories(patches_path);
     }
 
-    // Apply `-hack <name>` before the scan.
-    Lighthouse::ApplyLaunchHack();
-
     // Load enabled mod o2rs into the ArchiveManager.
     UpdateModFiles(true);
     LoadLooseModDirectories(patches_path);
@@ -382,20 +380,16 @@ void GameEngine::FinishInit() {
     Ship::Context::GetRawInstance()->GetLogger()->set_pattern("[%H:%M:%S.%e] [%s:%#] [%l] %v");
     SPDLOG_INFO("Starting Lighthouse version {} (Branch: {} | Commit: {})", (char*)gBuildVersion, (char*)gGitBranch,
                 (char*)gGitCommitHash);
-    Lighthouse::FlushLaunchHackLog();
 
     context->InitFileDropMgr();
     context->InitCrashHandler();
     context->InitEventSystem();
 
+    this->context->InitAudio({ .SampleRate = 22000, .SampleLength = 736, .DesiredBuffered = 2208 });
+
     lhFast3dWindow->SetTargetFps(60);
     lhFast3dWindow->SetMaximumFrameLatency(1);
     lhFast3dWindow->SetRendererUCode(ucode_f3d);
-
-    // Opt-in to memoization
-    if (auto interpreter = lhFast3dWindow->GetInterpreterWeak().lock()) {
-        interpreter->SetResolvedResourceCacheEnabled(true);
-    }
 
 #ifdef USE_NETWORKING
     SDLNet_Init();
@@ -409,16 +403,13 @@ void GameEngine::FinishInit() {
     Lighthouse::RescanLanguages();
 
     LighthouseGui::SetupGuiElements();
-    // Undo the -hack override only now: LighthouseModMenuWindow::InitElement()
-    // re-runs UpdateModFiles(true) during SetupGuiElements and would otherwise
-    // re-read the restored CVars and reload the persisted hack over the override.
-    Lighthouse::RestoreModSelectionAfterLaunchHack();
     // If UpdateModFiles(true) above quarantined conflicting romhack overlays,
     // surface that to the user now that the modal window is alive.
     MaybeShowModConflictPopup();
     // Likewise if it refused romhack overlays due to a non-v1.0 base.
     MaybeShowRomhackBaseMismatchPopup();
     Instance->AudioInit();
+    AdaptiveFps_Configure(30); // BK ticks at 30 Hz
     // Instance->LoadDictionary();
     // Instance->LoadPlayerAnims();
 #if defined(__SWITCH__) || defined(__WIIU__)
@@ -451,28 +442,16 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
 
     std::filesystem::path ownPath;
     std::vector<std::string> args;
-    for (int i = 1; i < argc; i++) {
-        std::string arg = argv[i];
-        std::string inlineValue;
-        bool takesValue = false;
-        if (Lighthouse::IsLaunchHackFlag(arg, inlineValue, takesValue)) {
-            if (takesValue) {
-                i++;
-            }
-            continue;
+    if (argc > 1) {
+        for (int i = 1; i < argc; i++) {
+            args.push_back(argv[argc]);
         }
-        args.push_back(arg);
     }
     GameExtractor extract;
     PromptSteps promptStep = PS_FILE_CHECK;
     std::atomic<bool> extracting = false;
     bool extractStarted = false;
     std::atomic<size_t> extractCount{ 0 }, totalExtract{ 0 };
-
-    // Async ROM selection: the result callback fires on this thread during the render step below, so
-    // these plain locals are safe to capture by reference.
-    bool romLoaded = false;
-    bool romResultReady = false;
 
     std::string installPath = Ship::Context::GetAppBundlePath();
     std::string file;
@@ -532,7 +511,7 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
                     GameExtractor::sCustomCodePromptActive = false;
                 });
         }
-        if (LighthouseGui::PopupsQueued() > 0 || extracting || Ship::FileBrowserWindow::IsOpen()) {
+        if (LighthouseGui::PopupsQueued() > 0 || extracting) {
             goto render;
         }
 
@@ -618,10 +597,8 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
                                 "Lighthouse does not have proper file permissions.\nPlease move it to a "
                                 "folder that does and run again.",
                                 "OK", "", [&]() {
-                                    if (tfile != NULL) {
-                                        fclose(tfile);
-                                    }
-                                    PathTestCleanup();
+                                    fclose(tfile);
+                                    PathTestCleanup(tfile);
                                     threadPool = nullptr;
                                     lhFast3dWindow = nullptr;
                                     context = nullptr;
@@ -629,7 +606,7 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
                                 });
                         } else {
                             fclose(tfile);
-                            if (!PathTestCleanup()) {
+                            if (!PathTestCleanup(tfile)) {
                                 LighthouseGui::RegisterPopup(
                                     "Lighthouse Permissions Error",
                                     "Lighthouse does not have proper file permissions.\nPlease move it to a "
@@ -748,17 +725,10 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
                     }
                     case PS_LOCAL: {
                         extract = GameExtractor();
-                        const std::string appDir = Ship::Context::GetAppDirectoryPath("bk");
-                        std::error_code sameDirEc;
-                        const bool sameDir = std::filesystem::equivalent(installPath, appDir, sameDirEc);
                         extract.SetSearchPath(installPath);
                         extract.GetRoms(args);
-                        if (sameDirEc || !sameDir) {
-                            extract.SetSearchPath(appDir);
-                            extract.GetRoms(args);
-                        }
-                        std::sort(args.begin(), args.end());
-                        args.erase(std::unique(args.begin(), args.end()), args.end());
+                        extract.SetSearchPath(Ship::Context::GetAppDirectoryPath("bk"));
+                        extract.GetRoms(args);
                         if (!args.empty()) {
                             promptStep = PS_WAIT;
                             LighthouseGui::RegisterPopup(
@@ -774,54 +744,13 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
                         continue;
                     }
                     case PS_FIRST: {
-                        if (args.empty()) {
-                            // Skip the picker entirely if a baserom.us.z64 is sitting in the app
-                            // directory: load it and go straight to extraction.
-                            std::string baserom = Ship::Context::GetPathRelativeToAppDirectory("baserom.us.z64");
-                            if (std::filesystem::exists(baserom) && extract.LoadRomFromPath(baserom)) {
-                                extracting = true;
-                                extractStarted = true;
-                                file = extract.GetRomPath();
-                                (void)threadPool->submit_task([&]() -> void {
-                                    extract.GenerateOTR(extractCount, totalExtract, "bk");
-                                    extracting = false;
-                                });
-                                continue; // stay in PS_FIRST; the completion check fires when done
-                            }
-                            // Otherwise open the picker (native dialog on desktop, ImGui browser on
-                            // consoles/arm). For the browser, the IsOpen() gate above keeps the loop
-                            // rendering until the user picks or cancels; the ROM loads before the callback.
-                            romResultReady = false;
-                            romLoaded = false;
-                            extract.SelectGameFromUI([&](bool ok) {
-                                romLoaded = ok;
-                                romResultReady = true;
-                            });
-                            promptStep = PS_FIRST_WAIT;
+                        if (args.empty() && !extract.SelectGameFromUI()) {
+                            promptStep = PS_FILE_CHECK;
                             continue;
                         }
                         extracting = true;
                         extractStarted = true;
                         file = extract.GetRomPath();
-                        (void)threadPool->submit_task([&]() -> void {
-                            extract.GenerateOTR(extractCount, totalExtract, "bk");
-                            extracting = false;
-                        });
-                        continue;
-                    }
-                    case PS_FIRST_WAIT: {
-                        if (!romResultReady) {
-                            goto render; // browser still open; keep drawing it
-                        }
-                        romResultReady = false;
-                        if (!romLoaded) {
-                            promptStep = PS_FILE_CHECK; // cancelled or failed to load
-                            continue;
-                        }
-                        extracting = true;
-                        extractStarted = true;
-                        file = extract.GetRomPath();
-                        promptStep = PS_FIRST; // so the ES_EXTRACT/PS_FIRST completion check fires
                         (void)threadPool->submit_task([&]() -> void {
                             extract.GenerateOTR(extractCount, totalExtract, "bk");
                             extracting = false;
@@ -1032,7 +961,6 @@ void GameEngine::ScaleImGui() {
 }
 
 void GameEngine::Create(int argc, char* argv[]) {
-    Lighthouse::ParseLaunchArgs(argc, argv);
     const auto instance = Instance = new GameEngine();
     // instance->AudioInit();
     // DisplayListPatch::Run();
@@ -1078,6 +1006,7 @@ void GameEngine::Destroy() {
 
     // Flush all resource refs so destructors run while spdlog is still active.
     // sResourceRefCache holds shared_ptrs that outlive the LUS cache otherwise.
+    AudioExit();
     ResourceHelpers_ClearRefCache();
     AudioDma_Clear();
     ReleaseSoundfonts();
@@ -1104,7 +1033,7 @@ void GameEngine::StartFrame() const {
         case KbScancode::LUS_KB_TAB: {
             // Toggle HD Assets
             CVarSetInteger(CVAR_SETTING("Mods.AlternateAssets"),
-                           !CVarGetInteger(CVAR_SETTING("Mods.AlternateAssets"), 1));
+                           !CVarGetInteger(CVAR_SETTING("Mods.AlternateAssets"), 0));
             break;
         }
         case KbScancode::LUS_KB_F4: {
@@ -1159,19 +1088,33 @@ void GameEngine::RelaunchIfRequested(int argc, char* argv[]) {
 #endif
 }
 
-#define SAMPLES_PER_FRAME (560 * 2 * 2)
+#if 0
+// Values for 44100 hz
+#define SAMPLES_HIGH 752
+#define SAMPLES_LOW 720
+#else
+// Values for 32000 hz
+#define SAMPLES_HIGH 560
+#define SAMPLES_LOW 528
 
-// 2 VIs per game frame (30fps)
-#define gVIsPerFrame 2
+#endif
+#define NUM_AUDIO_CHANNELS 2
+#define SAMPLES_PER_FRAME (SAMPLES_HIGH * NUM_AUDIO_CHANNELS * 2)
 
 extern "C" uint32_t GameEngine_GetSamplesPerFrame() {
     return SAMPLES_PER_FRAME;
 }
 
+// 2 VIs per game frame (30fps)
+#define gVIsPerFrame 2
+
+// 736 samples per audio update (44000/60, aligned to 184-sample boundary)
+#define AlFrameSize 736
+
 // Attract-demo audio hold
 static std::atomic<bool> sHoldAudio{ false };
-static constexpr int kDemoAudioHoldFrames = 2; // drawn ticks to stay held after the load
-static int sHoldFramesRemaining = 0;           // game thread only
+static constexpr int kDemoAudioHoldFrames = 2; // frames to stay held after the load
+static int sHoldFramesRemaining = 0;           // game-thread countdown
 
 extern "C" void port_beginDemoAudioHold(void) {
     if (kDemoAudioHoldFrames <= 0) {
@@ -1181,14 +1124,50 @@ extern "C" void port_beginDemoAudioHold(void) {
     sHoldAudio.store(true);
 }
 
-extern "C" void port_tickDemoAudioHold(void) {
-    if (sHoldAudio.load() && --sHoldFramesRemaining <= 0) {
-        sHoldAudio.store(false);
+void GameEngine::HandleAudioThread() {
+    int16_t audioBuffer[AlFrameSize * 2];
+    Acmd cmdList[0x800];
+
+    // Free-run: continuously keep the backend queue topped up, real-time paced and
+    // decoupled from the game frame, so a long game frame can't starve the device.
+    while (audio.running) {
+        if (audio.ready) {
+            while (audio.running && AudioPlayerBuffered() < AudioPlayerGetDesiredBuffered()) {
+                int samplesToGen = AlFrameSize * 2 * sizeof(int16_t);
+
+                memset(audioBuffer, 0, samplesToGen);
+
+                // While held, leave the buffer as silence and do NOT advance the engine.
+                if (!sHoldAudio) {
+                    int32_t cmdLen = 0;
+                    // Lock only the engine work; the volume scale and backend submit touch
+                    // worker-local / backend state, not the synth.
+                    port_lockAudio();
+                    func_802403F0();
+                    n_alAudioFrame(cmdList, &cmdLen, audioBuffer, AlFrameSize);
+                    func_80250650();
+                    port_unlockAudio();
+
+                    float master_vol = CVarGetInteger(CVAR_SETTING("Volume.Master"), 100) / 100.0f;
+                    for (u32 i = 0; i < AlFrameSize * 2; i++) {
+                        audioBuffer[i] = static_cast<s16>(audioBuffer[i] * master_vol);
+                    }
+                }
+                AudioPlayerPlayFrame((uint8_t*)audioBuffer, samplesToGen);
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
 }
 
-extern "C" int port_audioHeld(void) {
-    return sHoldAudio.load() ? 1 : 0;
+void GameEngine::StartAudioFrame() {
+    // Worker free-runs now; this only marks the engine initialized (first call is after
+    // audio init, once the game loop is running).
+    audio.ready = true;
+}
+
+void GameEngine::EndAudioFrame() {
+    // No-op: audio generation is decoupled from the game frame.
 }
 
 static std::vector<std::shared_ptr<Ship::IResource>> sSoundfontResources;
@@ -1237,20 +1216,31 @@ void GameEngine::AudioInit() {
     LoadSoundfonts();
 }
 
-// Local timer helper for the per-sub-frame cost measurement.
+void GameEngine::AudioStartThread() {
+    if (!audio.running) {
+        audio.running = true;
+        audio.thread = std::thread(HandleAudioThread);
+#ifdef _WIN32
+        SetThreadPriority(audio.thread.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
+#endif
+    }
+}
+
+void GameEngine::AudioExit() {
+    // Free-run worker checks `running` each loop (~every 2 ms), so just clear it and join.
+    audio.running = false;
+    if (audio.thread.joinable()) {
+        audio.thread.join();
+    }
+}
+
+// Local timer helper for the per-sub-frame measurement we feed into
+// AdaptiveFps_Sample.
 namespace {
 using Clock = std::chrono::steady_clock;
 inline long long NsSince(Clock::time_point t0) {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - t0).count();
 }
-
-// In-flight async builds of interpolated sub-frame replacement maps
-std::vector<std::future<void>> sMapBuildFutures;
-
-// Cost of the most recent sub-frame, and the wall time this pass may spend:
-// subframes/paceFps is exactly the game time one task represents.
-long long sLastSubFrameNs = 0;
-long long sPassBudgetNs = 0;
 } // namespace
 
 void GameEngine::RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>>& mtx_replacements,
@@ -1272,51 +1262,35 @@ void GameEngine::RunCommands(Gfx* Commands, const std::vector<std::unordered_map
     // Run() (frame rendered) and EndFrame() (buffer swap). On N64, CPU/RDP shared
     // physical memory so gFramebuffers always had valid pixel data after rendering.
     auto wndBase = Ship::Context::GetRawInstance()->GetWindow();
-    const auto passT0 = Clock::now();
     for (size_t frameIdx = 0; frameIdx < frameCount; frameIdx++) {
-        if (frameIdx >= 1 && frameIdx - 1 < sMapBuildFutures.size()) {
-            sMapBuildFutures[frameIdx - 1].wait();
-        }
-        // Stop once another sub-frame no longer fits in what the tick's worth
-        // of wall time has left.
-        if (frameIdx > 0 && sLastSubFrameNs > 0 && (sPassBudgetNs - NsSince(passT0)) < sLastSubFrameNs) {
-            break;
-        }
         const auto& m = mtx_replacements[frameIdx];
-        // Vertex-animated models blend into one buffer per draw, so unlike the
-        // matrix maps this can't be precomputed per sub-frame. It has to land
-        // right before the pass that reads it.
-        const float subframeBlend = (frameCount > 1) ? (float)(frameIdx + 1) / (float)frameCount : 1.0f;
-        if (frameCount > 1) {
-            FrameInterpolation_ApplyAnimVertices(subframeBlend);
-        }
-        // Overlays drawn by the Gui pass below place themselves per tick, so they need the
-        // same blend the geometry is being posed with or they step while the world glides.
-        Nametag::SetSubframeBlend(subframeBlend);
         bool isFinalFrame = (frameIdx == frameCount - 1);
+        // Bypass IsFrameReady() when interpolation is active — render all
+        // frames per tick and let vsync pace them.
         if (frameCount > 1 || wndBase->IsFrameReady()) {
-            // Sample the full CPU cost of producing this sub-frame.
-            auto runT0 = Clock::now();
             auto gui = wndBase->GetGui();
             wndBase->GetMouseStateManager()->StartFrame();
             gui->StartDraw();
             interpreter->StartFrame();
+            auto runT0 = Clock::now();
             interpreter->Run(Commands, m);
-            if (OS_ViBlackActive()) {
+            AdaptiveFps_Sample(NsSince(runT0));
+            // Emulate N64 osViBlack to prevent a flicker when the scene is drawn
+            // for the falling jiggy transition framebuffer capture.
+            if (port_isViBlack()) {
                 interpreter->mGfxFrameBuffer = 0;
                 auto rapi = interpreter->GetCurrentRenderingAPI();
                 rapi->StartDrawToFramebuffer(0, 1.0f);
                 rapi->ClearFramebuffer(true, false);
             }
             gui->EndDraw();
-            sLastSubFrameNs = NsSince(runT0);
             interpreter->EndFrame();
             CALL_EVENT(FrameDrawEnd);
         }
         interpreter->mInterpolationIndex++;
     }
 
-    bool curAltAssets = CVarGetInteger(CVAR_SETTING("Mods.AlternateAssets"), 1);
+    bool curAltAssets = CVarGetInteger(CVAR_SETTING("Mods.AlternateAssets"), 0);
     if (prevAltAssets != curAltAssets) {
         prevAltAssets = curAltAssets;
         Ship::Context::GetRawInstance()->GetResourceManager()->SetAltAssetsEnabled(curAltAssets);
@@ -1335,11 +1309,24 @@ namespace {
 struct SubframePacing {
     int subframes; // renders to emit this tick (>= 1)
     int fps;       // target present fps for this tick
-    int viPerTick; // VIs of game time this tick covers
 };
 
 SubframePacing ComputeSubframePacing() {
     int target_fps = (int)GameEngine::Instance->GetInterpolationFPS();
+
+    // Demo/replay modes render at the native rate
+    const bool replayMode = func_802E4A08();
+    if (!replayMode) {
+        if (CVarGetInteger(CVAR_SETTING("AdaptiveFPS"), 1)) {
+            target_fps = (int)AdaptiveFps_Cap((uint32_t)target_fps);
+        }
+
+        // Some music-synced cutscenes cap interpolation at native 30
+        int fpsCap = port_getInterpolationFpsCap();
+        if (fpsCap > 0 && target_fps > fpsCap) {
+            target_fps = fpsCap;
+        }
+    }
 
     // Game-logic VI per tick: gVIsPerFrame (=2 -> 30 Hz) normally; demo
     // replay and cutscene stutter raise it for slow N64 frames.
@@ -1349,12 +1336,6 @@ SubframePacing ComputeSubframePacing() {
     }
     if (viPerTick < gVIsPerFrame) {
         viPerTick = gVIsPerFrame;
-    }
-    // time_setDeltaReal_frames() clamps the demo's recorded VI count to 15, so the
-    // tick never advances more than that no matter what the demo asks for. Match it
-    // here or a bogus recorded value would scale the sub-frame count with it.
-    if (viPerTick > 15) {
-        viPerTick = 15;
     }
 
     int effective_logic_fps = 60 / viPerTick;
@@ -1370,16 +1351,18 @@ SubframePacing ComputeSubframePacing() {
         subframesPerTick = 1;
     }
 
-    // paceFps drives DXGI's per-present wait so that subframes * 1/paceFps =
-    // viPerTick/60 wall (= game time per tick). Derived from viPerTick rather than
-    // effective_logic_fps: the latter is truncated (VI=7 -> 8, not 8.57), which would
-    // stretch wall time on the odd VI counts demo playback hands us every tick.
-    int fps = subframesPerTick * 60 / viPerTick;
-    if (fps < 1) {
-        fps = 1;
+    // Replay modes never interpolate: one render per tick, held to viPerTick/60 by the floor.
+    if (replayMode) {
+        subframesPerTick = 1;
     }
 
-    return { subframesPerTick, fps, viPerTick };
+    // paceFps drives DXGI's per-present wait so that subframes * 1/paceFps =
+    // viPerTick/60 wall (= game time per tick). When viPerTick == gVIsPerFrame
+    // and target_fps is a multiple of eff, paceFps == target_fps and stays
+    // constant. Otherwise it varies per tick to keep wall == game.
+    int fps = subframesPerTick * effective_logic_fps;
+
+    return { subframesPerTick, fps };
 }
 } // namespace
 
@@ -1411,25 +1394,15 @@ void GameEngine::ProcessGfxCommands(Gfx* commands) {
         mtx_replacements.resize(subframesPerTick);
     }
     size_t activeFrames = 0;
-    sMapBuildFutures.clear();
     for (int i = 1; i <= subframesPerTick; i++) {
         if (i < subframesPerTick) {
             float t = (float)i / (float)subframesPerTick;
-            if (i == 1) {
-                FrameInterpolation_Interpolate(t, mtx_replacements[activeFrames]);
-            } else {
-                auto* map = &mtx_replacements[activeFrames];
-                sMapBuildFutures.push_back(
-                    std::async(std::launch::async, [t, map] { FrameInterpolation_Interpolate(t, *map); }));
-            }
+            FrameInterpolation_Interpolate(t, mtx_replacements[activeFrames]);
         } else {
             mtx_replacements[activeFrames].clear();
         }
         activeFrames++;
     }
-
-    // Wall time this tick is worth, straight from its VI count.
-    sPassBudgetNs = 1000000000LL * pacing.viPerTick / 60;
 
     if (wnd != nullptr) {
         wnd->SetTargetFps(fps);
@@ -1447,14 +1420,10 @@ void GameEngine::ProcessGfxCommands(Gfx* commands) {
 
     RunCommands(commands, mtx_replacements, activeFrames);
 
-    // Drain any builds the render loop didn't consume (debugger path, early
-    // return) before the next tick's StartRecord resets the trees they read.
-    for (auto& f : sMapBuildFutures) {
-        if (f.valid()) {
-            f.wait();
-        }
+    // [port] Release the demo audio hold after kDemoAudioHoldFrames rendered frames.
+    if (sHoldAudio.load() && --sHoldFramesRemaining <= 0) {
+        sHoldAudio.store(false);
     }
-    sMapBuildFutures.clear();
 }
 
 uint32_t GameEngine::GetInterpolationFPS() {

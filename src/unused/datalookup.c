@@ -1,4 +1,4 @@
-// BanjoDecomp: core2/code_5FD80.c
+// BanjoDecomp: (unknown decomp origin - data lookup)
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"

@@ -15,6 +15,7 @@
 std::vector<ImVec2> windowTypeSizes = { {} };
 
 extern std::unordered_map<s16, const char*> warpPointSceneList;
+extern void Warp();
 
 namespace LighthouseGui {
 extern std::shared_ptr<LighthouseModalWindow> mModalWindow;
@@ -113,13 +114,6 @@ void Menu::UpdateWindowBackendObjects() {
     }
 }
 
-void Menu::UpdateAudioBackendObjects() {
-    availableAudioBackends = Ship::Context::GetRawInstance()->GetAudio()->GetAvailableAudioBackends();
-    for (auto& backend : *availableAudioBackends) {
-        availableAudioBackendsMap[backend] = audioBackendsMap.at(backend);
-    }
-}
-
 bool Menu::IsMenuPopped() {
     return popped;
 }
@@ -142,7 +136,6 @@ void Menu::InitElement() {
     menuThemeIndex = static_cast<UIWidgets::Colors>(CVarGetInteger(CVAR_SETTING("Menu.Theme"), defaultThemeIndex));
 
     UpdateWindowBackendObjects();
-    UpdateAudioBackendObjects();
 }
 
 void Menu::UpdateElement() {
@@ -256,9 +249,8 @@ uint32_t Menu::DrawSearchResults(std::string& menuSearchText) {
                 entry.info.type == WIDGET_SEPARATOR_TEXT || entry.info.isHidden || entry.info.hideInSearch) {
                 continue;
             }
-            const char* extraTooltip = entry.info.options->tooltip;
-            std::string widgetStr = entry.info.name + std::string(extraTooltip != nullptr ? extraTooltip : "") +
-                                    entry.extraTerms + entry.sidebarName;
+            std::string widgetStr =
+                entry.info.name + entry.info.options->tooltip + entry.extraTerms + entry.sidebarName;
             std::transform(widgetStr.begin(), widgetStr.end(), widgetStr.begin(), ::tolower);
             widgetStr.erase(std::remove(widgetStr.begin(), widgetStr.end(), ' '), widgetStr.end());
             if (widgetStr.find(menuSearchText) != std::string::npos) {
@@ -350,9 +342,10 @@ void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors me
                 UIWidgets::ComboboxOptions options = {};
                 options.color = menuThemeIndex;
                 options.tooltip = "Sets the audio API used by the game. Requires a relaunch to take effect.";
-                options.disabled = availableAudioBackends->size() <= 1;
+                options.disabled =
+                    Ship::Context::GetRawInstance()->GetAudio()->GetAvailableAudioBackends()->size() <= 1;
                 options.disabledTooltip = "Only one audio API is available on this platform.";
-                if (UIWidgets::Combobox("Audio API", &currentAudioBackend, availableAudioBackendsMap, options)) {
+                if (UIWidgets::Combobox("Audio API", &currentAudioBackend, audioBackendsMap, options)) {
                     Ship::Context::GetRawInstance()->GetAudio()->SetCurrentAudioBackend(currentAudioBackend);
                 }
             } break;

@@ -1,4 +1,4 @@
-// BanjoDecomp: core2/ultra/debug/assert.c (kept in unused/, not built on PC)
+// BanjoDecomp: core2/ultra/debug/assert.c
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"

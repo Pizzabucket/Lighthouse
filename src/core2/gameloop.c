@@ -1,11 +1,7 @@
-// BanjoDecomp: core2/code_5C870.c
 #include <ultra64.h>
 #include "core1/core1.h"
 #include "functions.h"
 #include "variables.h"
-
-extern void Graphics_PushFrame(Gfx* data);
-extern void Framebuffer_ReadbackGPU(int bufferIndex);
 
 #include "gc/gctransition.h"
 #include "bk_time.h"
@@ -19,10 +15,10 @@ extern void func_8025A2B0(void);
 extern void func_8025A430(s32, s32, s32);
 extern void gsworld_setEnableUpdate(s32);
 extern void func_8034BB90(void);
-extern void picturebox_spawn(void);
+extern void func_8030C27C(void);
 extern void func_80321C34(void);
 extern void func_8030ED0C(void);
-extern void coMusicPlayer_update(void);
+extern void comusicPlayer_update(void);
 
 enum transition_e {
     TRANSITION_0_NONE
@@ -115,46 +111,50 @@ void func_802E38E8(enum map_e map, s32 exit, s32 reset_on_load){
 void func_802E398C(s32 arg0) {
     gsworld_free();
     func_8030ED0C();
-    coMusicPlayer_update();
+    comusicPlayer_update();
     if (arg0 != 0) {
         func_802E3854();
     }
 }
 
-void func_802E39D0(Gfx **gfx, Mtx **mtx, Vtx **vtx, s32 framebuffer_idx, bool arg4) {
-    Mtx* mtx_start = *mtx;
-    Vtx* vtx_start = *vtx;
+void func_802E39D0(Gfx **gdl, Mtx **mptr, Vtx **vptr, s32 framebuffer_idx, s32 arg4){
+    Mtx* m_start = *mptr; 
+    Vtx* v_start = *vptr;
 
-    setupFramebufferForGamemode(gfx, framebuffer_idx);
+    scissorBox_SetForGameMode(gdl, framebuffer_idx);
     D_8037E8E0.unkC = false;
     port_mirror_beginScene();
-    gsworld_draw(gfx, mtx, vtx);
-    CALL_EVENT(OnWorldDraw, gfx, mtx, vtx);
+    gsworld_draw(gdl, mptr, vptr);
+    CALL_EVENT(OnWorldDraw, gdl, mptr, vptr);
     port_mirror_endScene();
-    port_mirror_undoProjection(gfx, mtx);
+    port_mirror_undoProjection(gdl, mptr);
+    if (port_shouldCaptureTransition()) {
+        port_captureTransitionFb(gdl);
+    }
     if(!arg4){
         func_802E67AC();
         func_802E3BD0(getActiveFramebuffer());
         func_802E67C4();
-        func_802E5F10(gfx);
+        func_802E5F10(gdl);
     }
-
-    if ((D_8037E8E0.game_mode == GAME_MODE_A_SNS_PICTURE) && (D_8037E8E0.unk19 != 6) && (D_8037E8E0.unk19 != 5)) {
-        if (port_shouldCaptureTransition()) {
-            port_captureTransitionFb(gfx);
-        }
-        gctransition_draw(gfx, mtx, vtx);
+    if( D_8037E8E0.game_mode == GAME_MODE_A_SNS_PICTURE
+        && D_8037E8E0.unk19 != 6
+        && D_8037E8E0.unk19 != 5
+    ){
+        gctransition_draw(gdl, mptr, vptr);
     }
 
     // [port] Return rendering to main FB after scene draw + transitions for
     // SNS/Bottles modes. Must come AFTER gctransition_draw so the transition
     // fade renders into the aux FB (visible on the picture), not the main FB.
     if (D_8037E8E0.game_mode == GAME_MODE_8_BOTTLES_BONUS || D_8037E8E0.game_mode == GAME_MODE_A_SNS_PICTURE) {
-        gsSPResetFB((*gfx)++);
+        gsSPResetFB((*gdl)++);
     }
     
-    if ((D_8037E8E0.game_mode == GAME_MODE_8_BOTTLES_BONUS) || (D_8037E8E0.game_mode == GAME_MODE_A_SNS_PICTURE)) {
-        picturebox_resetScissorBoxAndFramebuffer(gfx, mtx, vtx);
+    if( D_8037E8E0.game_mode == GAME_MODE_8_BOTTLES_BONUS
+        || D_8037E8E0.game_mode == GAME_MODE_A_SNS_PICTURE
+    ){
+        func_8030C2D4(gdl, mptr, vptr);
     }
 
     // [port] Skip all HUD/overlay draws while pause menu is capturing the
@@ -163,44 +163,42 @@ void func_802E39D0(Gfx **gfx, Mtx **mtx, Vtx **vtx, s32 framebuffer_idx, bool ar
     bool capturing = gcpausemenu_isCapturing();
 
     if(!game_is_frozen() && gsworld_getEnableDraw() && !capturing){
-        core2_A5BC0_drawScreenOverlayMarkers(gfx, mtx, vtx);
+        func_8032D474(gdl, mptr, vptr);
     }
 
-    gcpausemenu_draw(gfx, mtx, vtx);
+    gcpausemenu_draw(gdl, mptr, vptr);
     if(!game_is_frozen() && !capturing){
-        // dummy_func_8025AFC0(gfx, mtx, vtx);
+        dummy_func_8025AFC0(gdl, mptr, vptr);
     }
 
     if (!capturing) {
-        gcdialog_draw(gfx, mtx, vtx);
+        gcdialog_draw(gdl, mptr, vptr);
     }
     if(!game_is_frozen() && !capturing){
-        itemPrint_draw(gfx, mtx, vtx);
+        itemPrint_draw(gdl, mptr, vptr);
     }
 
     if (!capturing) {
-        CALL_EVENT(OnHudDraw, gfx, mtx, vtx);
-        printbuffer_draw(gfx, mtx, vtx);
+        printbuffer_draw(gdl, mptr, vptr);
     }
 
-    if ((D_8037E8E0.game_mode != GAME_MODE_A_SNS_PICTURE) || (D_8037E8E0.unk19 == 6) || (D_8037E8E0.unk19 == 5)) {
-        // [port] Snapshot the composed frame for the falling-jiggy piece textures.
-        if (port_shouldCaptureTransition()) {
-            port_captureTransitionFb(gfx);
-        }
-        gctransition_draw(gfx, mtx, vtx);
+    if( D_8037E8E0.game_mode != GAME_MODE_A_SNS_PICTURE
+        || D_8037E8E0.unk19 == 6
+        || D_8037E8E0.unk19 == 5
+    ){
+        gctransition_draw(gdl, mptr, vptr);
     }
     // [port] Populate gFramebuffers from the GPU via gDPReadFB at native resolution.
     // Transitions and particles read from gFramebuffers during game logic.
     // On N64, gFramebuffers was the render target directly; on PC the GPU renders
     // to its own buffer, so we read it back here when requested.
     if (port_consumeReadbackRequest()) {
-        gDPReadFB((*gfx)++, 0, (u16 *)gFramebuffers[getActiveFramebuffer()],
+        gDPReadFB((*gdl)++, 0, (u16 *)gFramebuffers[getActiveFramebuffer()],
                   0, 0, gFramebufferWidth, gFramebufferHeight, 1);
     }
-    core1_15B30_finishDList(gfx);
-    osWritebackDCache(mtx_start, sizeof(Mtx)*( *mtx - mtx_start));
-    osWritebackDCache(vtx_start, sizeof(Vtx)*( *vtx - vtx_start));
+    core1_15B30_finishDList(gdl);
+    osWritebackDCache(m_start, sizeof(Mtx)*( *mptr - m_start));
+    osWritebackDCache(v_start, sizeof(Vtx)*( *vptr - v_start));
 }
 
 void func_802E3BD0(s32 frame_buffer_indx){
@@ -231,10 +229,10 @@ void game_setMode(enum game_mode_e next_mode, s32 arg1){
 
     //L802E3C84
     if(next_mode == GAME_MODE_8_BOTTLES_BONUS || next_mode == GAME_MODE_A_SNS_PICTURE){
-        picturebox_init();
+        func_8030C1A0();
     }
     else{
-        picturebox_free();
+        func_8030C204();
     }//L802E3CB4
 
     D_8037E8E0.game_mode = next_mode;
@@ -293,7 +291,6 @@ void func_802E3E7C(enum game_mode_e mode){
     s32 sp28;
     s32 prev_mode;
     s32 prev_map;
-    s32 outgoing_mode = D_8037E8E0.game_mode; // [port] game_setMode below overwrites it
 
     core1_15B30_sendMesg3ToRenderThread();
     sp34 = D_8037E8E0.unk18;
@@ -303,16 +300,13 @@ void func_802E3E7C(enum game_mode_e mode){
     prev_mode = D_8037E8E0.unk0;
     game_setMode(GAME_MODE_2_UNKNOWN, 0);
     if(!volatileFlag_getAndSet(VOLATILE_FLAG_21, 0) || map_getLevel(gsworld_getMap()) == map_getLevel(D_8037E8E0.map)){
-        if(!volatileFlag_get(VOLATILE_FLAG_1F_IN_CHARACTER_PARADE)
-            && EventSystem_Should(VB_MAP_SAVESTATE_USE, true, outgoing_mode))
+        if(!volatileFlag_get(VOLATILE_FLAG_1F_IN_CHARACTER_PARADE))
             mapSavestate_save(gsworld_getMap());
     }
     func_802E398C(1);
     prev_map = gsworld_getMap();
     func_802E38E8(map, sp28, sp34);
-    if(EventSystem_Should(VB_MAP_SAVESTATE_USE, true, mode)){
-        mapSavestate_apply(map);
-    }
+    mapSavestate_apply(map);
     D_8037E8E0.unk0 = prev_mode;
     game_setMode(mode, sp30);
     jiggylist_map_actors();
@@ -324,21 +318,26 @@ s32 func_802E3F80(void){
     return D_8037E8E0.unk0;
 }
 
-void game_draw(bool arg0) {
-    Gfx *gfx, *gfx_start, *gfx_end;
+extern void Graphics_PushFrame(Gfx* data);
+extern void Framebuffer_ReadbackGPU(int bufferIndex);
+
+void game_draw(s32 arg0){
+    Gfx *gfx;
+    Gfx *gfx_start;
+    Gfx *sp2C;
     Mtx *mtx;
     Mtx *mtx_start;
     Vtx *vtx;
     Vtx *vtx_start;
 
-    if (arg0) {
+    if(arg0) {
         scissorBox_setDefault();
     }
 
-    graphicscache_swapAndGetStacks(&gfx, &mtx, &vtx);
+    getGraphicsStacks(&gfx, &mtx, &vtx);
 
-    if (D_8037E8E0.unkC == TRUE) { // BUG: Compares explicit for integral value of TRUE, instead for true-ness
-        graphicscache_swapAndGetStacks(&gfx, &mtx, &vtx);
+    if(D_8037E8E0.unkC == 1){
+        getGraphicsStacks(&gfx, &mtx, &vtx);
     }
 
     gfx_start = gfx;
@@ -346,11 +345,6 @@ void game_draw(bool arg0) {
     vtx_start = vtx;
 
     func_802E39D0(&gfx, &mtx, &vtx, getActiveFramebuffer(), arg0);
-
-    // [port] Frame submission gate
-    if (!EventSystem_Should(VB_PICTUREBOX_SUBMIT_FRAME, true, (s32)(gfx - gfx_start))) {
-        return;
-    }
 
     graphicsCache_checkFrame(gfx_start, gfx, mtx_start, mtx, vtx_start, vtx);
 
@@ -361,11 +355,11 @@ void game_draw(bool arg0) {
     Framebuffer_ReadbackGPU(getActiveFramebuffer());
 
     if(D_8037E8E0.unkC == 0){
-        gfx_end = gfx;
+        sp2C = gfx;
         viMgr_func_8024C1DC();
-        core1_15B30_addF3DEXTaskData_40000000(gfx_start, gfx_end);
+        core1_15B30_addF3DEXTaskData_40000000(gfx_start, sp2C);
 
-        if (arg0) {
+        if(arg0) {
             scissorBox_setDefault();
         }
     }
@@ -385,8 +379,6 @@ void transitionToMap(enum map_e map, s32 exit, s32 transition){
 }
 
 void func_802E40A8(s32 map, s32 exit){
-    // [port] Romhack gate: listeners may rewrite the requested destination.
-    EventSystem_Should(VB_MAP_CHANGE_REQUEST, true, &map, &exit);
     D_8037E8E0.unk18 = 1;
     D_8037E8E0.map = map;
     D_8037E8E0.exit = exit;
@@ -397,8 +389,6 @@ void func_802E40C4( s32 arg0){
 }
 
 void func_802E40D0(s32 map, s32 exit){
-    // [port] Romhack gate: listeners may rewrite the requested destination.
-    EventSystem_Should(VB_MAP_CHANGE_REQUEST, true, &map, &exit);
     D_8037E8E0.unk18 = 0;
     D_8037E8E0.map = map;
     D_8037E8E0.exit = exit;
@@ -430,13 +420,13 @@ void func_802E4170(void){
     timedFuncQueue_free();
     func_802F9C48();
     modelRender_free();
-    depthbuffer_stub();
+    depthBuffer_stub();
     func_802E398C(0);
     func_8030AFD8(0);
     func_80321854();
     debugScoreStates();
     animCache_free();
-    coMusicPlayer_free();
+    comusicPlayer_free();
     func_8030D8DC();
 }
 
@@ -445,12 +435,12 @@ void func_802E4214(enum map_e map_id){
     D_8037E8E0.unk19 = D_8037E8E0.unk18 = 0;
     D_8037E8E0.map = D_8037E8E0.exit = D_8037E8E0.unk17 = 0;
     D_8037E8E0.unk1B = D_8037E8E0.unk1A = 0;
-    D_8037E8E0.unkC = FALSE;
+    D_8037E8E0.unkC = 0;
     D_8037E8E0.unk1C = 0;
     savedata_init();
     sns_save_and_update_global_data();
     func_8030D86C();
-    coMusicPlayer_init();
+    comusicPlayer_init();
     func_80322764();
     timedFuncQueue_init();
     func_802F9CD8();
@@ -462,7 +452,7 @@ void func_802E4214(enum map_e map_id){
     func_802E5F38();
     defragManager_init();
     modelRender_init();
-    depthbuffer_enable(TRUE);
+    func_80253428(1);
     animCache_init();
     viewport_reset();
     viewport_setNearAndFar(1.0f, 10000.0f);
@@ -490,9 +480,6 @@ void func_802E4384(void){
     }
     else{
         func_8033DC18();
-        // [port] Latch this cutscene frame's stutter before anything reads it, so the
-        // time delta below and the renderer's frame budget agree for the whole tick.
-        port_tickCutsceneStutter();
         // [port] Use a fixed 2-VI timestep for normal gameplay.
         s32 viDivisor = viMgr_func_8024BFA0();
         func_8033DC20(); // always consume wall-clock to keep last_ticks fresh
@@ -574,7 +561,6 @@ bool func_802E4424(void) {
                 return false;
 
             case 7:                                     /* switch 1 */
-                port_beginDemoAudioHold();
                 func_8034B8C0(D_8037E8E0.map, D_8037E8E0.exit);
                 func_802E3E7C(GAME_MODE_8_BOTTLES_BONUS);
                 return false;
@@ -606,11 +592,11 @@ bool func_802E4424(void) {
     sp1C = gsworld_update();
     func_80321C34();
     func_8030ED0C();
-    coMusicPlayer_update();
+    comusicPlayer_update();
     switch (D_8037E8E0.game_mode) {
         case GAME_MODE_8_BOTTLES_BONUS:
         case GAME_MODE_A_SNS_PICTURE:
-            picturebox_spawn();
+            func_8030C27C();
             /* fallthrough */
         case GAME_MODE_7_ATTRACT_DEMO:
             /* fallthrough */
@@ -699,7 +685,7 @@ s32 game_defrag(void){
         gcpausemenu_defrag();
     switch(overlayManager_getLoadedID()){
         case OVERLAY_2_WHALE:
-            maClanker_defrag();
+            func_803894A0();
             break;
         case OVERLAY_D_WITCH:
             code_C9E70_defrag();

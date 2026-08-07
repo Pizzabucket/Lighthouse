@@ -1,4 +1,3 @@
-// BanjoDecomp: core2/code_9D760.c
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"
@@ -12,7 +11,7 @@ void func_80324700(u8* self){
 
     for(i_ptr = self; i_ptr < self + 0x10; i_ptr++){
         if(*i_ptr != 0xFF){
-            modelRender_setAppendageVisibility((i_ptr - self) + 1, *i_ptr);
+            func_8033A45C((i_ptr - self) + 1, *i_ptr);
         }
     }
 }

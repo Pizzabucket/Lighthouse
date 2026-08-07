@@ -1,8 +1,9 @@
 #pragma once
+extern "C" {
 #include "functions.h"
 #include "core2/ba/model.h"
 #include "variables.h"
-#include "port/Enhancements/Cosmetics/PlayerColors.h"
+}
 
 class DummyPlayer {
 public:
@@ -48,15 +49,13 @@ public:
     void dummy_setScale(f32 scale);
     void dummy_setTransformation(Transformation transform);
     Transformation dummy_getTransformation();
-    // Bottles-bonus effect mask (D_803635EC bitfield).
-    void dummy_setBottlesBonus(s32 mask);
     void dummy_setVisible(s32 arg0);
     void dummy_setYDisplacement(f32 arg0);
     void dummy_setYaw(f32 yaw);
     void dummy_update(void);
     void dummy_updateModel(void);
     // void func_80254008(void);
-    void modelAppendages_loadAppendage(void);
+    void func_8029DD6C(void);
     // void modelRender_func_8033A280(f32);
     //  anim
     void dummyAnim_init(void);
@@ -78,17 +77,7 @@ public:
     // eye/mouth
     void dummy_setEyeState(bool squint, bool wink, bool isHat);
     AnimCtrl* dummy_getAnimCtrl();
-    ActorMarker* dummy_getMarker() const {
-        return dummyMarker;
-    }
-    void dummy_despawnActor(void);
-    // Cosmetics: which Anchor client this stand-in belongs to, and the model colors they chose.
-    void dummy_setOwner(uint32_t clientId) {
-        dummyOwnerId = clientId;
-    }
-    void dummy_setColors(const BKPlayerColorSet& colors) {
-        dummyColors = colors;
-    }
+    // Actor* getDummyActor() const { return dummyActor; }
 
 private:
     uint32_t PlayerID;
@@ -123,7 +112,8 @@ private:
     } dummyAnimScale;
     AnimCtrl* dummyAnimCtrl = nullptr;
     f32 dummyVelocity[3];
-    ActorMarker* dummyMarker = nullptr;
+    ActorMarker* dummyMarker;
+    Actor* dummyActor = nullptr;
     f32 dummy_D_8037C100[3];
     f32 dummy_D_8037C110[3];
     f32 dummyDisplacement[3];
@@ -136,16 +126,13 @@ private:
 
     f32 dummy_D_8037D230;
     u8 dummy_D_8037D234;
-    u8 dummy_kazooieLower;
-    u8 dummy_kazooieFeet;
-    u8 dummy_kazooieTurbos;
-    u8 dummy_kazooieUpper;
-    u8 dummy_kazooieBoots;
+    u8 dummy_modelSquint;
+    u8 dummy_modelWink;
+    u8 dummy_modelMouth1;
+    u8 dummy_kazooieVisible;
+    u8 dummy_modelMouth2;
     u8 dummy_D_8037D23A;
-    f32 dummy_banjoLeftEye;
-    f32 dummy_banjoRightEye;
+    f32 dummy_modelEyeBlendUpper;
+    f32 dummy_modelEyeBlendLower;
     Transformation dummy_transformation;
-    s32 dummyBottlesBonus = 0;
-    uint32_t dummyOwnerId = 0;
-    BKPlayerColorSet dummyColors = {};
 };

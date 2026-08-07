@@ -23,7 +23,6 @@ typedef enum {
     DISABLE_FOR_SINGLE_LANGUAGE,
     DISABLE_DURING_PARADE,
     DISABLE_FOR_ROMHACK,
-    FORCED_ON_FOR_ANCHOR_CONNECTED,
 } DisableOption;
 
 struct WidgetInfo;
@@ -266,7 +265,6 @@ struct MainMenuEntry {
 
 static const std::unordered_map<Ship::AudioBackend, const char*> audioBackendsMap = {
     { Ship::AudioBackend::WASAPI, "Windows Audio Session API" },
-    { Ship::AudioBackend::COREAUDIO, "Core Audio" },
     { Ship::AudioBackend::SDL, "SDL" },
     { Ship::AudioBackend::NUL, "Null" },
 };

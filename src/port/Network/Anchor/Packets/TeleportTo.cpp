@@ -1,16 +1,18 @@
 #include "port/Network/Anchor/Anchor.h"
 #include <nlohmann/json.hpp>
 #include <libultraship/libultraship.h>
+//#include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "port/Network/Anchor/JsonConversions.hpp"
 
-#include "functions.h"
-
-// Exit id the game reserves for "spawn at an explicit position" (see func_8028E4B0).
-#define EXIT_WARP_DESTINATION 0x63
+extern "C" {
+#include "macros.h"
+// extern PlayState* gPlayState;
+}
 
 /**
  * TELEPORT_TO
  *
- * See REQUEST_TELEPORT; carries the sender's live map/position/yaw.
+ * See REQUEST_TELEPORT for more information, this is the second part of the process.
  */
 
 void Anchor::SendPacket_TeleportTo(uint32_t clientId) {
@@ -18,18 +20,16 @@ void Anchor::SendPacket_TeleportTo(uint32_t clientId) {
         return;
     }
 
-    f32 pos[3];
-    player_getPosition(pos);
+    /*Player* player = GET_PLAYER(gPlayState);
 
     nlohmann::json payload;
     payload["type"] = TELEPORT_TO;
     payload["targetClientId"] = clientId;
-    payload["map"] = gsworld_getMap();
-    payload["exit"] = gsworld_getExit();
-    payload["pos"] = pos;
-    payload["yaw"] = player_getYaw();
+    payload["entranceIndex"] = gSaveContext.entranceIndex;
+    payload["roomIndex"] = gPlayState->roomCtx.curRoom.num;
+    payload["posRot"] = player->actor.world;
 
-    SendJsonToRemote(payload);
+    SendJsonToRemote(payload);*/
 }
 
 void Anchor::HandlePacket_TeleportTo(nlohmann::json& payload) {
@@ -37,18 +37,23 @@ void Anchor::HandlePacket_TeleportTo(nlohmann::json& payload) {
         return;
     }
 
-    GameMap map = payload.at("map").get<GameMap>();
-    std::vector<f32> pos = payload.at("pos").get<std::vector<f32>>();
-    f32 yaw = payload.at("yaw").get<f32>();
+    // s32 entranceIndex = payload.at("entranceIndex").get<s32>();
+    // s8 roomIndex = payload.at("roomIndex").get<s8>();
+    // PosRot posRot = payload.at("posRot").get<PosRot>();
 
-    if (map == (GameMap)gsworld_getMap()) {
-        yaw_set(yaw);
-        yaw_setIdeal(yaw);
-        yaw_applyIdeal();
-        func_8028F85C(pos.data());
-        return;
-    }
-
-    player_setWarpDestination(pos.data(), yaw, payload.value("exit", 0));
-    func_8031D04C(map, EXIT_WARP_DESTINATION);
+    // gPlayState->nextEntranceIndex = entranceIndex;
+    // gPlayState->transitionTrigger = TRANS_TRIGGER_START;
+    // gPlayState->transitionType = TRANS_TYPE_INSTANT;
+    // gSaveContext.respawn[RESPAWN_MODE_DOWN].entranceIndex = entranceIndex;
+    // gSaveContext.respawn[RESPAWN_MODE_DOWN].roomIndex = roomIndex;
+    // gSaveContext.respawn[RESPAWN_MODE_DOWN].pos = posRot.pos;
+    // gSaveContext.respawn[RESPAWN_MODE_DOWN].yaw = posRot.rot.y;
+    // gSaveContext.respawn[RESPAWN_MODE_DOWN].playerParams = 0xDFF;
+    // gSaveContext.nextTransitionType = TRANS_TYPE_FADE_BLACK_FAST;
+    // gSaveContext.respawnFlag = 1;
+    // static HOOK_ID hookId = 0;
+    // hookId = REGISTER_VB_SHOULD(VB_INFLICT_VOID_DAMAGE, {
+    //     *should = false;
+    //     GameInteractor::Instance->UnregisterGameHookForID<GameInteractor::OnVanillaBehavior>(hookId);
+    // });
 }

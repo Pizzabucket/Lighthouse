@@ -7,14 +7,14 @@ typedef struct {
     enum mumbotoken_e uid;
 }ActorLocal_MumboToken;
 
-void chMumboToken_update(Actor *this);
+void func_802E0B10(Actor *this);
 enum mumbotoken_e func_802E0CB0(Actor *this);
 
 /* .data */
- ActorInfo chMumboToken = {
+ ActorInfo D_803685A0 = { 
     MARKER_39_MUMBO_TOKEN, ACTOR_2D_MUMBO_TOKEN, ASSET_41A_SPRITE_MUMBO_TOKEN,
-    0, NULL,
-    chMumboToken_update, actor_update_func_80326224, fxTouchSparkle_draw,
+    0, NULL, 
+    func_802E0B10, actor_update_func_80326224, fxTouchSparkle_draw,
     2000, 0, 0.0f, 0
 };
 
@@ -27,7 +27,6 @@ void chMumboToken_collect(ActorMarker *marker, ActorMarker *other_marker){
 
     this = marker_getActor(marker);
     mumboscore_set(func_802E0CB0(this), true);
-    CALL_EVENT(OnCollectibleCollected, ANCHOR_COLLECTIBLE_MUMBO, func_802E0CB0(this));
     func_8030E760(0x401, 1.0f, 0x7fff);
     timedFunc_set_1(0.75f, (GenFunction_1)progressDialog_showDialogMaskZero, FILEPROG_4_MUMBO_TOKEN_TEXT);
     fxSparkle_mumboToken(&marker->propPtr->x);
@@ -57,7 +56,7 @@ enum mumbotoken_e func_802E0A90(Actor *this){
     }
 }
 
-void chMumboToken_update(Actor *this){
+void func_802E0B10(Actor *this){
     ActorLocal_MumboToken *local;
     f32 sp28[3];
 

@@ -1,6 +1,7 @@
 #include "port/Network/Anchor/Anchor.h"
 #include <nlohmann/json.hpp>
 #include <libultraship/libultraship.h>
+//#include "soh/OTRGlobals.h"
 
 /**
  * REQUEST_TEAM_STATE
@@ -15,10 +16,8 @@
  * state
  */
 
-void Anchor::SendPacket_RequestTeamState(bool force) {
-    // `force` bypasses the IsSaveLoaded check: OnGameLoad fires from gameFile_load while the map is
-    // still FILE_SELECT, so the save is loading but IsSaveLoaded() is still false.
-    if ((!force && !IsSaveLoaded()) || !roomState.syncItemsAndFlags) {
+void Anchor::SendPacket_RequestTeamState() {
+    if (!IsSaveLoaded() || !roomState.syncItemsAndFlags) {
         return;
     }
 

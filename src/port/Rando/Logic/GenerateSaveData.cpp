@@ -8,9 +8,11 @@
 #include "port/Save/Types.h"
 
 extern "C" {
+void ability_setLearned(s32 move, s32 val);
 void ability_setHasUsed(enum ability_e move);
 
 void item_setMaxCount(s32 item);
+void fileProgressFlag_set(enum file_progress_e index, s32 set);
 }
 
 // clang-format off
@@ -126,7 +128,7 @@ void Rando::Logic::InitializeSaveData(SaveData* saveData) {
             // .randoItemId = Rando::StaticData::GetRandoItemByActorId((actor_e)randoStaticCheck.actorId),
             .randoCollectionId = randoStaticCheck.collectionId,
             .isShuffled = false,
-            .eligible = false,
+            .obtained = false,
             .skipped = false,
         };
 
@@ -148,7 +150,7 @@ void Rando::Logic::InitializeSaveData(SaveData* saveData) {
 }
 
 void Rando::Logic::GenerateSaveData(SaveData* saveData) {
-    for (auto& object : RANDO_SAVE_CHECKS) {
+    for (auto& object : Rando::Logic::shuffledPool) {
         saveData->shipSaveData.randoSaveData.randoSaveCheck[object.randoCheckId] = object;
     }
 
@@ -170,30 +172,21 @@ void Rando::Logic::GrantStartingLoadout() {
             item_setMaxCount(item);
         }
     }
-}
 
-void Rando::Logic::GrantFileProgressFlags() {
+    // Set progress flag for tutorial dialogue, skipping them
     for (auto& fileprog : progressLoadout) {
         fileProgressFlag_set(fileprog, 1);
     }
-}
 
-void Rando::Logic::GrantSpiralMountainChecks() {
-    if (!CVarGetInteger(CVAR_ENHANCEMENT("Gameplay.SkipSMTutorial"), 0)) {
-        return;
-    }
+    if (CVarGetInteger(CVAR_ENHANCEMENT("Gameplay.SkipSMTutorial"), 0)) {
+        for (auto& smCheckId : smRandoCheckIdList) {
+            RandoSaveCheck randoSaveCheck = RANDO_SAVE_CHECKS[smCheckId];
 
-    for (auto& smCheckId : smRandoCheckIdList) {
-        RandoSaveCheck randoSaveCheck = RANDO_SAVE_CHECKS[smCheckId];
+            if (!randoSaveCheck.isShuffled) {
+                continue;
+            }
 
-        if (!randoSaveCheck.isShuffled) {
-            continue;
-        }
-
-        CustomObject::CheckObtainedEX(smCheckId, true);
-        if (Rando::StaticData::Items[randoSaveCheck.randoItemId].randoItemType == RITYPE_MOLEHILL) {
-            ability_setLearned((ability_e)randoSaveCheck.randoCollectionId, true);
-            ability_setHasUsed((ability_e)randoSaveCheck.randoCollectionId);
+            CustomObject::CheckObtainedEX(smCheckId, true);
         }
     }
 }

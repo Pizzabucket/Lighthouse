@@ -1,4 +1,3 @@
-// BanjoDecomp: core2/code_B5E00.c
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"
@@ -117,7 +116,6 @@ return 0;
 void gameFile_clear(s32 gamenum){
     s32 filenum = gameFile_GameIdToFileIdMap[gamenum];
     savedata_clear(&gameFile_saveData[filenum]);
-    CALL_EVENT(OnGameErase, gamenum);
 }
 
 void gameFile_load(s32 gamenum){

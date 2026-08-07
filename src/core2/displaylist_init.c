@@ -1,4 +1,3 @@
-// BanjoDecomp: core2/code_8DC20.c
 #include "core1/core1.h"
 #include "functions.h"
 #include "variables.h"
@@ -42,7 +41,7 @@ s32 D_803830A0;
 void func_80314BB0(Gfx **gfx, Mtx **mtx, Vtx **vtx, void * frame_buffer_1, void *frame_buffer_2) {
     // [port] GPU-side pause snapshot
     s32 pauseFb = port_getPauseFramebufferId();
-    bool isCapture = (frame_buffer_1 == depthbuffer_getDataPtr());
+    bool isCapture = (frame_buffer_1 == zBuffer_get());
 
     gSPDisplayList((*gfx)++, D_8036C630);
 
@@ -80,7 +79,7 @@ void func_80314BB0(Gfx **gfx, Mtx **mtx, Vtx **vtx, void * frame_buffer_1, void 
 void func_80315084(Gfx **gfx, Mtx **mtx, Vtx **vtx){
     gsworld_setEnableDraw(0);
     D_803830A0 = 2;
-    func_80314BB0(gfx, mtx, vtx, depthbuffer_getDataPtr(), gFramebuffers[getActiveFramebuffer()]);
+    func_80314BB0(gfx, mtx, vtx, zBuffer_get(), gFramebuffers[getActiveFramebuffer()]);
     port_mirror_markCapture();
 }
 
@@ -94,7 +93,7 @@ void func_80315110(Gfx **gfx, Mtx **mtx, Vtx **vtx){
     else{
         D_803830A0--;
     }
-    func_80314BB0(gfx, mtx, vtx, gFramebuffers[getActiveFramebuffer()], depthbuffer_getDataPtr());
+    func_80314BB0(gfx, mtx, vtx, gFramebuffers[getActiveFramebuffer()], zBuffer_get());
 }
 
 void func_803151D0(Gfx **gfx, Mtx **mtx, Vtx **vtx){

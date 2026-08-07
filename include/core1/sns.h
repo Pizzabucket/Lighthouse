@@ -1,10 +1,6 @@
 #ifndef BANJO_KAZOOIE_CORE1_SNS_H
 #define BANJO_KAZOOIE_CORE1_SNS_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * sns sets
  */
@@ -136,9 +132,5 @@ void sns_stub                                          (void);
 
 void snspayload_append_key_to_outgoing_payload         (struct SnsPayload *payload, s32 key);
 void snspayload_calc_checksum                          (struct SnsPayload *payload);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

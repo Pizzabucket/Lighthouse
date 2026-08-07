@@ -7,7 +7,9 @@
 #include "UIWidgets.hpp"
 #include <spdlog/fmt/fmt.h>
 
+extern "C" {
 #include "variables.h"
+}
 
 namespace LighthouseGui {
 

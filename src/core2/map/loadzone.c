@@ -1,4 +1,3 @@
-// BanjoDecomp: core2/code_A960.c
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"

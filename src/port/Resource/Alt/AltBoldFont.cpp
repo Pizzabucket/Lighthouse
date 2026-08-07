@@ -23,7 +23,6 @@
 #include <ship/resource/File.h>
 #include <fast/resource/type/Texture.h>
 
-#include "AltPathPool.h"
 #include "AltSprites.h"
 #include "port/Enhancements/Events/Hooks/Events.h"
 #include "port/ShipInit.hpp"
@@ -42,11 +41,7 @@ struct ChunkHeader {
     int16_t x, y, w, h;
 };
 
-// resolveHd hands these strings' addresses into display lists, and texture
-// binds may be memoized on that address downstream: the strings must be
-// immutable and immortal, so they live in the shared alt-path pool.
-// reset() clears the output mapping, never the pool.
-std::unordered_map<const void*, const char*> sByOutput;
+std::unordered_map<const void*, std::string> sByOutput;
 std::unordered_set<std::string> sBuilt;
 std::mutex sMutex;
 
@@ -140,7 +135,7 @@ void buildHd(const void* output, const void* maskChunk, const void* sphereChunk)
 
     std::unique_lock<std::mutex> lock(sMutex);
     if (sBuilt.count(cachePath)) {
-        sByOutput[output] = InternAltPath("__OTR__" + cachePath);
+        sByOutput[output] = "__OTR__" + cachePath;
         return;
     }
 
@@ -148,7 +143,7 @@ void buildHd(const void* output, const void* maskChunk, const void* sphereChunk)
     // the identity path. Serve it directly and skip compositing.
     if (Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->HasFile("alt/" + cachePath)) {
         sBuilt.insert(cachePath);
-        sByOutput[output] = InternAltPath("__OTR__" + cachePath);
+        sByOutput[output] = "__OTR__" + cachePath;
         return;
     }
     lock.unlock();
@@ -216,7 +211,7 @@ void buildHd(const void* output, const void* maskChunk, const void* sphereChunk)
 
     lock.lock();
     sBuilt.insert(cachePath);
-    sByOutput[output] = InternAltPath("__OTR__" + cachePath);
+    sByOutput[output] = "__OTR__" + cachePath;
 }
 
 void resolveHd(const void* output, const char** path) {
@@ -226,7 +221,7 @@ void resolveHd(const void* output, const char** path) {
     std::lock_guard<std::mutex> lock(sMutex);
     auto it = sByOutput.find(output);
     if (it != sByOutput.end()) {
-        *path = it->second;
+        *path = it->second.c_str();
     }
 }
 

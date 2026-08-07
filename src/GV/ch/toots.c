@@ -1,4 +1,4 @@
-// BanjoDecomp: GV/ch/toots.c
+// BanjoDecomp: CH/toots.c
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"

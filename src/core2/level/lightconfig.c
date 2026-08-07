@@ -1,4 +1,4 @@
-// BanjoDecomp: core2/code_35520.c
+// BanjoDecomp: code_35520.c -> lightconfig.c
 // This file defines the distances for type-4 camera nodes (the normal 3rd person view camera?) for each map
 #include <ultra64.h>
 #include "functions.h"
