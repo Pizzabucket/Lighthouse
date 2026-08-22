@@ -21,6 +21,16 @@ extern void assetCache_free(void *);
 extern AnimMtxList *animMtxList_new();
 extern AnimMtxList *animMtxList_defrag(AnimMtxList *);
 extern MtxF *animMtxList_get(AnimMtxList *this, s32 arg1);
+extern bool lighthouse_cullV2_inPlaybackMode(void);
+extern void lighthouse_cullV2_setFrustumChecksEnabled(bool enabled);
+extern void lighthouse_menuCull_setFrustumChecksEnabled(bool enabled);
+extern void lighthouse_demoSync_setFrustumChecksEnabled(bool enabled);
+extern void actor_postdrawMethod(ActorMarker *);
+extern void actor_predrawMethod(Actor *);
+
+extern f32 sViewportPosition[3];
+extern f32 sViewportFrustumPlanes[4][4];
+extern void actor_postdrawMethod(ActorMarker *marker);
 
 
 typedef struct{
@@ -570,6 +580,7 @@ Gfx mipMapWrapDL[] =
 };
 
 s32 D_80370990 = 0;
+s32 cur_model_would_have_been_culled_in_demo = 0;
 
 BKGeoCmdFunc sGeoCmdList[] = {
     modelRender_geoCmd_Unk0,
@@ -635,6 +646,84 @@ struct{
     model_render_post_draw_callback_f post_draw;
     void *post_draw_arg;
 } modelRenderCallback;
+
+// Original N64 sphere/frustum test used ONLY for demo actor logic.
+// This intentionally does not use Lighthouse's extended draw-distance multiplier.
+static bool modelRender_originalActorSphereInFrustum_demoSync(f32 pos[3], f32 distance) {
+    f32 delta[3];
+    s32 i;
+
+    delta[0] = pos[0] - sViewportPosition[0];
+    delta[1] = pos[1] - sViewportPosition[1];
+    delta[2] = pos[2] - sViewportPosition[2];
+
+    for (i = 0; i < 4; i++) {
+        if (distance <= delta[0] * sViewportFrustumPlanes[i][0] +
+                        delta[1] * sViewportFrustumPlanes[i][1] +
+                        delta[2] * sViewportFrustumPlanes[i][2]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool modelRender_isActorDraw_demoSync(void) {
+    return
+        modelRenderCallback.pre_draw == (model_render_pre_draw_callback_f)actor_predrawMethod ||
+        modelRenderCallback.post_draw == (model_render_post_draw_callback_f)actor_postdrawMethod;
+}
+
+// Original Banjo whole-model sphere/frustum test.
+// Used only to preserve demo/playback actor logic while visual culling stays disabled.
+static bool modelRender_originalSphereInFrustum(f32 pos[3], f32 distance) {
+    f32 delta[3];
+    s32 i;
+
+    delta[0] = pos[0] - sViewportPosition[0];
+    delta[1] = pos[1] - sViewportPosition[1];
+    delta[2] = pos[2] - sViewportPosition[2];
+
+    for (i = 0; i < 4; i++) {
+        if (distance <= delta[0] * sViewportFrustumPlanes[i][0] +
+                        delta[1] * sViewportFrustumPlanes[i][1] +
+                        delta[2] * sViewportFrustumPlanes[i][2]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Demo-only actor culling. World/geo culling stays disabled.
+static bool modelRender_demoActorSphereInFrustum(f32 pos[3], f32 distance) {
+    f32 delta[3];
+    s32 i;
+
+    delta[0] = pos[0] - sViewportPosition[0];
+    delta[1] = pos[1] - sViewportPosition[1];
+    delta[2] = pos[2] - sViewportPosition[2];
+
+    for (i = 0; i < 4; i++) {
+        if (distance <= delta[0] * sViewportFrustumPlanes[i][0] +
+                        delta[1] * sViewportFrustumPlanes[i][1] +
+                        delta[2] * sViewportFrustumPlanes[i][2]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool modelRender_isDemoActorDraw(void) {
+    if (getGameMode() != GAME_MODE_7_ATTRACT_DEMO) {
+        return false;
+    }
+
+    return
+        modelRenderCallback.pre_draw == (model_render_pre_draw_callback_f)actor_predrawMethod ||
+        modelRenderCallback.post_draw == (model_render_post_draw_callback_f)actor_postdrawMethod;
+}
 
 s32 modelRenderDynEnvColor[4];
 
@@ -959,7 +1048,7 @@ void modelRender_geoCmd_DRAWDIST(Gfx ** gfx, Mtx ** mtx, struct bk_geo_cmd_s *ar
         // [port] The N64 bounding boxes in CmdD_DRAW_DISTANCE are too conservative
         // for the port's viewport (292x216 -> 320x240 at 4:3). Extend to all aspect
         // ratios since the port always renders at a higher effective resolution.
-        if (EventSystem_Should(VB_DRAWDIST_BOX_CULL, true, sp2C, sp20)) {
+        if (port_shouldDisableCulling() || EventSystem_Should(VB_DRAWDIST_BOX_CULL, true, sp2C, sp20)) {
             modelRender_executeGeoCmds(gfx, mtx, (BKGeoCmd*)((u8*)cmd + cmd->unk14));
         }
     }
@@ -970,6 +1059,12 @@ void modelRender_geoCmd_UnkE(Gfx ** gfx, Mtx ** mtx, struct bk_geo_cmd_s *arg2){
     f32 sp34[3];
     f32 sp30;
     GeoCmdE * cmd = (GeoCmdE *)arg2;
+    if (port_shouldDisableCulling() && !lighthouse_cullV2_inPlaybackMode()) {
+        if (cmd->unk10) {
+            modelRender_executeGeoCmds(gfx, mtx, (BKGeoCmd*)((u8*)cmd + cmd->unk10));
+        }
+        return;
+    }
 
     if(cmd->unk12 == -1){
         s32 draw;
@@ -1015,6 +1110,12 @@ void modelRender_geoCmd_UnkE(Gfx ** gfx, Mtx ** mtx, struct bk_geo_cmd_s *arg2){
 //cmdF_??? (processes model_setup offset_0x20)
 void modelRender_geoCmd_CAMERA(Gfx ** gfx, Mtx ** mtx, struct bk_geo_cmd_s *arg2){
     GeoCmdF *cmd = (GeoCmdF *)arg2;
+    if (port_shouldDisableCulling() && !lighthouse_cullV2_inPlaybackMode()) {
+        if (cmd->unk8 != 0) {
+            modelRender_executeGeoCmds(gfx, mtx, (BKGeoCmd*)((u8*)cmd + cmd->unk8));
+        }
+        return;
+    }
     int tmp_v0 = cameraAreaList_searchForEntryInBounds(modelRenderCameraAreaList, cmd->unkC, cmd->unkA);
     int draw = (!tmp_v0 && (cmd->unkB & 1)) || (tmp_v0 && (cmd->unkB & 2));
     draw = port_geoCullDraw(OCCLUSION_CMD_CAMERA, cmd, modelRenderModelBin, draw, cmd->unkC, cmd->unkA, cmd->unkB, 0);
@@ -1055,6 +1156,8 @@ BKModelBin *modelRender_draw(Gfx **gfx, Mtx **mtx, f32 position[3], f32 rotation
     s32 alpha; 
     f32 tmp_f0;
     f32 padB8;
+
+    cur_model_would_have_been_culled_in_demo = false;
     
     if( (!model_bin && !sSecondaryModelData.model_id)
         || (model_bin && sSecondaryModelData.model_id)
@@ -1136,10 +1239,22 @@ BKModelBin *modelRender_draw(Gfx **gfx, Mtx **mtx, f32 position[3], f32 rotation
         return 0;
     }
 
-    D_80370990 = (D_80383704) ? viewport_func_8024DB50(object_position, spD0*scale) : 1;
-    if(D_80370990 == 0){
-        modelRender_reset();
-        return 0;
+    if (port_shouldDisableCulling()) {
+        if (lighthouse_cullV2_inPlaybackMode()) {
+            // Exact widescreen demo state: remember original visibility,
+            // but keep the visual model alive during the draw.
+            cur_model_would_have_been_culled_in_demo =
+                !((D_80383704) ? viewport_func_8024DB50(object_position, spD0 * scale) : 1);
+        } else {
+            cur_model_would_have_been_culled_in_demo = false;
+        }
+        D_80370990 = true;
+    } else {
+        D_80370990 = (D_80383704) ? viewport_func_8024DB50(object_position, spD0*scale) : 1;
+        if(D_80370990 == 0){
+            modelRender_reset();
+            return 0;
+        }
     }
 
     if(modelRenderCallback.pre_draw != NULL){
@@ -1328,7 +1443,13 @@ BKModelBin *modelRender_draw(Gfx **gfx, Mtx **mtx, f32 position[3], f32 rotation
 
     // [port] Mirror mode: counter-mirror text-bearing models so text reads correctly
     if (_mirror_excluded) gSPClearExtraGeometryMode((*gfx)++, G_EX_INVERT_CULLING);
+    if (port_shouldDisableCulling()) {
+        lighthouse_cullV2_setFrustumChecksEnabled(false);
+    }
     modelRender_executeGeoCmds(gfx, mtx, (BKGeoCmd *)((u8 *)model_bin + model_bin->geo_list_offset));
+    if (port_shouldDisableCulling()) {
+        lighthouse_cullV2_setFrustumChecksEnabled(true);
+    }
     // [port] Mirror mode: restore culling inversion
     if (_mirror_excluded) gSPSetExtraGeometryMode((*gfx)++, G_EX_INVERT_CULLING);
     gSPPopMatrix((*gfx)++, G_MTX_MODELVIEW);
@@ -1346,6 +1467,15 @@ BKModelBin *modelRender_draw(Gfx **gfx, Mtx **mtx, f32 position[3], f32 rotation
 
 
     modelRender_reset();
+    if (port_shouldDisableCulling()) {
+        if (lighthouse_cullV2_inPlaybackMode()) {
+            // Critical Recomp behavior: expose original visibility after draw.
+            D_80370990 = !cur_model_would_have_been_culled_in_demo;
+        } else {
+            D_80370990 = true;
+        }
+        cur_model_would_have_been_culled_in_demo = false;
+    }
     return model_bin;
 }
 
