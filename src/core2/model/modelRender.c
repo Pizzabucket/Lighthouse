@@ -39,8 +39,6 @@ extern AnimMtxList *animMtxList_defrag(AnimMtxList *);
 extern MtxF *animMtxList_get(AnimMtxList *this, s32 arg1);
 extern bool lighthouse_cullV2_inPlaybackMode(void);
 extern void lighthouse_cullV2_setFrustumChecksEnabled(bool enabled);
-extern void lighthouse_menuCull_setFrustumChecksEnabled(bool enabled);
-extern void lighthouse_demoSync_setFrustumChecksEnabled(bool enabled);
 extern void actor_postdrawMethod(ActorMarker *);
 extern void actor_predrawMethod(Actor *);
 
