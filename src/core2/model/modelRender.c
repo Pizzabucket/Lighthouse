@@ -12,7 +12,6 @@
 #include "port/Interpolation/FrameInterpolation.h"
 #include "port/Patches/GeoCull.h"
 
-extern s32 getGameMode(void);
 
 #define ARRAYLEN(x) (sizeof(x) / sizeof((x)[0]))
 
@@ -24,12 +23,6 @@ extern AnimMtxList *animMtxList_new();
 extern AnimMtxList *animMtxList_defrag(AnimMtxList *);
 extern MtxF *animMtxList_get(AnimMtxList *this, s32 arg1);
 extern void lighthouse_cullV2_setFrustumChecksEnabled(bool enabled);
-extern void actor_postdrawMethod(ActorMarker *);
-extern void actor_predrawMethod(Actor *);
-
-extern f32 sViewportPosition[3];
-extern f32 sViewportFrustumPlanes[4][4];
-extern void actor_postdrawMethod(ActorMarker *marker);
 
 
 typedef struct{
@@ -144,7 +137,6 @@ typedef struct {
     s32 size_4;
     s32 unk8;
 }GeoCmd10;
-
 
 
 void modelRender_geoCmd_Unk0(Gfx **, Mtx **, struct bk_geo_cmd_s *);
@@ -645,84 +637,6 @@ struct{
     model_render_post_draw_callback_f post_draw;
     void *post_draw_arg;
 } modelRenderCallback;
-
-// Original N64 sphere/frustum test used ONLY for demo actor logic.
-// This intentionally does not use Lighthouse's extended draw-distance multiplier.
-static bool modelRender_originalActorSphereInFrustum_demoSync(f32 pos[3], f32 distance) {
-    f32 delta[3];
-    s32 i;
-
-    delta[0] = pos[0] - sViewportPosition[0];
-    delta[1] = pos[1] - sViewportPosition[1];
-    delta[2] = pos[2] - sViewportPosition[2];
-
-    for (i = 0; i < 4; i++) {
-        if (distance <= delta[0] * sViewportFrustumPlanes[i][0] +
-                        delta[1] * sViewportFrustumPlanes[i][1] +
-                        delta[2] * sViewportFrustumPlanes[i][2]) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool modelRender_isActorDraw_demoSync(void) {
-    return
-        modelRenderCallback.pre_draw == (model_render_pre_draw_callback_f)actor_predrawMethod ||
-        modelRenderCallback.post_draw == (model_render_post_draw_callback_f)actor_postdrawMethod;
-}
-
-// Original Banjo whole-model sphere/frustum test.
-// Used only to preserve demo/playback actor logic while visual culling stays disabled.
-static bool modelRender_originalSphereInFrustum(f32 pos[3], f32 distance) {
-    f32 delta[3];
-    s32 i;
-
-    delta[0] = pos[0] - sViewportPosition[0];
-    delta[1] = pos[1] - sViewportPosition[1];
-    delta[2] = pos[2] - sViewportPosition[2];
-
-    for (i = 0; i < 4; i++) {
-        if (distance <= delta[0] * sViewportFrustumPlanes[i][0] +
-                        delta[1] * sViewportFrustumPlanes[i][1] +
-                        delta[2] * sViewportFrustumPlanes[i][2]) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-// Demo-only actor culling. World/geo culling stays disabled.
-static bool modelRender_demoActorSphereInFrustum(f32 pos[3], f32 distance) {
-    f32 delta[3];
-    s32 i;
-
-    delta[0] = pos[0] - sViewportPosition[0];
-    delta[1] = pos[1] - sViewportPosition[1];
-    delta[2] = pos[2] - sViewportPosition[2];
-
-    for (i = 0; i < 4; i++) {
-        if (distance <= delta[0] * sViewportFrustumPlanes[i][0] +
-                        delta[1] * sViewportFrustumPlanes[i][1] +
-                        delta[2] * sViewportFrustumPlanes[i][2]) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool modelRender_isDemoActorDraw(void) {
-    if (getGameMode() != GAME_MODE_7_ATTRACT_DEMO) {
-        return false;
-    }
-
-    return
-        modelRenderCallback.pre_draw == (model_render_pre_draw_callback_f)actor_predrawMethod ||
-        modelRenderCallback.post_draw == (model_render_post_draw_callback_f)actor_postdrawMethod;
-}
 
 s32 modelRenderDynEnvColor[4];
 
@@ -1454,7 +1368,6 @@ BKModelBin *modelRender_draw(Gfx **gfx, Mtx **mtx, f32 position[3], f32 rotation
     else{
         modelRenderRotation[0] = modelRenderRotation[1] = modelRenderRotation[2] = 0.0f;
     }
-
 
 
     // [port] Mirror mode: counter-mirror text-bearing models so text reads correctly
