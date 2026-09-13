@@ -7,6 +7,9 @@
 
 Actor *chXmasTree_draw(ActorMarker *marker, Gfx **gfx, Mtx **mtx, Vtx **vtx);
 void chXmasTree_update(Actor *this);
+extern void port_xmasTreeTimerStart(s32 ticks);
+extern void port_xmasTreeTimerStop(void);
+extern s32 port_xmasTreeTimerEmpty(void);
 
 /* .data */
 ActorInfo chXmasTree = { 
@@ -25,10 +28,22 @@ Actor *chXmasTree_draw(ActorMarker *marker, Gfx **gfx, Mtx **mtx, Vtx **vtx){
     return actor_draw(marker, gfx, mtx, vtx);
 }
 
+// Route the challenge through the shared timer manager so the HUD style can change without resetting time.
+static void chXmasTree_stopChallengeTimer(void) {
+    port_xmasTreeTimerStop();
+}
+
+static s32 chXmasTree_challengeTimerEmpty(void) {
+    return port_xmasTreeTimerEmpty();
+}
+
+static void chXmasTree_startChallengeTimer(void) {
+    port_xmasTreeTimerStart(VER_SELECT(3600, 3000, 0, 0) - 1);
+}
 void chXmasTree_free(Actor *this){
     u8 tmp_a0;
 
-    item_set(ITEM_6_HOURGLASS, false);
+    chXmasTree_stopChallengeTimer();
     tmp_a0 = this->unk44_31;
     if(tmp_a0){
         sfxsource_freeSfxsourceByIndex(tmp_a0);
@@ -116,7 +131,7 @@ void chXmasTree_update(Actor *this){
         && (port_puzzleStep_getForMap(MAP_53_FP_CHRISTMAS_TREE, ANCHOR_PUZZLE_FP_TREE_ICE) & 0x1)) {
         levelSpecificFlags_set(LEVEL_FLAG_29_FP_XMAS_TREE_COMPLETE, true);
         if (this->state == 4) {
-            item_set(ITEM_6_HOURGLASS, false);
+            chXmasTree_stopChallengeTimer();
             mapSpecificFlags_set(2, false);
         }
     }
@@ -164,8 +179,7 @@ void chXmasTree_update(Actor *this){
                 if(func_802BB270()){
                     subaddie_set_state(this, 4);
                     chXmasTree_setState(this, 1);
-                    item_set(ITEM_0_HOURGLASS_TIMER, VER_SELECT(3600, 3000, 0, 0) - 1);
-                    item_set(ITEM_6_HOURGLASS, TRUE);
+                    chXmasTree_startChallengeTimer();
 
                 }
             }
@@ -175,7 +189,7 @@ void chXmasTree_update(Actor *this){
             if(mapSpecificFlags_get(3)){
                 subaddie_set_state(this, 6);
                 chXmasTree_setState(this, 1);
-                item_set(ITEM_6_HOURGLASS, false);
+                chXmasTree_stopChallengeTimer();
                 tmp_a0 = this->unk44_31;
                 if(tmp_a0){
                     sfxsource_freeSfxsourceByIndex(tmp_a0);
@@ -185,7 +199,7 @@ void chXmasTree_update(Actor *this){
                 timedFunc_set_0(0.5f, chXmasTree_swapCameraToIce);
             }
             else{//L80387470
-                if(item_empty(ITEM_6_HOURGLASS)){
+                if(chXmasTree_challengeTimerEmpty()){
                     subaddie_set_state(this, 5);
                     mapSpecificFlags_set(2, false);
                     this->lifetime_value = 0.1f;

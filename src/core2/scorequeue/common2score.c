@@ -10,7 +10,7 @@
 
 f32 func_802FB0DC(struct8s *);
 f32 func_802FB0E4(struct8s *);
-
+extern s32 port_betaHourglassDisplayRestored(void);
 
 Gfx D_80369920[] = {
     gsDPPipeSync(),
@@ -87,7 +87,7 @@ struct8s D_80369960[] = {
     },
     {   0, 0, 0.0f, 0.0f, 0.0f, 0, 0, 0.0f,
         ITEM_5_XMAS_TREE_TIMER, ASSET_6DC_SPRITE_XMAS_TREE_TIMER, 0x1, 0xE,
-        0.5f, 1.0f, 24.0f, 256.0f,
+        1.0f / 6.0f, 1.0f, 24.0f, 224.0f, // Restored timer: 10 FPS at the timer HUD position.
         1.0f, 24.0f, 2.0f, -1.0f,
         0, {0}, 0.0f
     },
@@ -135,6 +135,8 @@ void func_802FD360(struct8s *arg0, Gfx **gfx, Mtx **mtx, Vtx **vtx){
     s32 tmp_s4;
     s32 texture_width;
     s32 texture_height;
+    s32 frame_count;
+    s32 frame_index;
     f32 tmp_f26;
     f32 f2;
 
@@ -146,10 +148,39 @@ void func_802FD360(struct8s *arg0, Gfx **gfx, Mtx **mtx, Vtx **vtx){
     }
     viewport_setRenderViewportAndOrthoMatrix(gfx, mtx);
     gSPVertex((*gfx)++, (uintptr_t)*vtx, 4, 0);
-    if(arg0->unk20 == ITEM_0_HOURGLASS_TIMER){
+
+    // OFF/effective-retail keeps the original +12 frame offset.
+    // Effective-beta starts the confirmed beta sprite at its frame 0.
+    if(arg0->unk20 == ITEM_0_HOURGLASS_TIMER && !port_betaHourglassDisplayRestored()){
         tmp_s2 = 0xC;
     }
-    func_80347FC0(gfx, (void *)arg0->unk50, ((s32)arg0->unk60 + tmp_s2)%arg0->unk2C, 0, 0, 0, 0, 2, 2, &texture_width, &texture_height);
+
+    frame_count = arg0->unk2C;
+
+    // Keep this one unused sprite inside its real runtime frame array.
+    if(arg0->unk20 == ITEM_5_XMAS_TREE_TIMER && arg0->unk50 != 0){
+        BKSprite *sprite = (BKSprite *)arg0->unk50;
+        if(sprite->frameCnt > 0){
+            frame_count = sprite->frameCnt;
+        }
+    }
+
+    if(arg0->unk20 == ITEM_0_HOURGLASS_TIMER &&
+       port_betaHourglassDisplayRestored() &&
+       arg0->unk50 != 0){
+        BKSprite *sprite = (BKSprite *)arg0->unk50;
+        if(sprite->frameCnt > 0){
+            frame_count = sprite->frameCnt;
+        }
+    }
+
+    if(frame_count <= 0){
+        frame_count = 1;
+    }
+
+    frame_index = ((s32)arg0->unk60 + tmp_s2)%frame_count;
+
+    func_80347FC0(gfx, (void *)arg0->unk50, frame_index, 0, 0, 0, 0, 2, 2, &texture_width, &texture_height);
     tmp_f26 = (arg0->unk20 == ITEM_0_HOURGLASS_TIMER && texture_width == 0x10) ? 1.0f : 0.0f;
     for(tmp_s4 = 0; tmp_s4 < 2; tmp_s4++){//L802FD528
         for(tmp_s2 = 0; tmp_s2 < 2; tmp_s2++){//
@@ -203,6 +234,8 @@ struct8s *fxcommon2score_new(enum item_e item_id) {
 
 void fxcommon2score_update(s32 arg0, struct8s * arg1){
     s32 tmp;
+    s32 desired_asset;
+
     f32 two = 2.0f;
     f32 phi_f16;
     f32 tmpf;
@@ -213,8 +246,58 @@ void fxcommon2score_update(s32 arg0, struct8s * arg1){
         fxcommon2score_free(arg0, arg1);
     }
     else{
+        // manager.c holds the effective visible style during a live option
+        // switch. The old sprite stays loaded for its complete slide-down,
+        // then this swaps the asset before the replacement pops back up.
+        if(arg0 == ITEM_0_HOURGLASS_TIMER){
+            desired_asset = ASSET_6DA_SPRITE_HOURGLASS;
+
+            if(port_betaHourglassDisplayRestored()){
+                desired_asset = ASSET_6DB_SPRITE_SKULL_HOURGLASS;
+            }
+
+            if(arg1->unk24 != desired_asset){
+                if(arg1->unk50 != 0){
+                    assetCache_free((void *)arg1->unk50);
+                    arg1->unk50 = 0;
+                }
+
+                arg1->unk24 = desired_asset;
+                arg1->unk2C = 0x16;
+                arg1->unk60 = 0.0f;
+            }
+        }
+
         if(arg1->unk50 == 0 && arg1->unk24){
             arg1->unk50 = (uintptr_t)assetcache_get(arg1->unk24);
+
+            // The dormant HUD table says 0xE frames, but the port must use the
+            // frame count actually present in the extracted sprite resource.
+            if(arg0 == ITEM_5_XMAS_TREE_TIMER && arg1->unk50 != 0){
+                BKSprite *sprite = (BKSprite *)arg1->unk50;
+                if(sprite->frameCnt > 0){
+                    arg1->unk2C = sprite->frameCnt;
+                }
+            }
+
+            // The confirmed beta timer is still a real BKSprite. Use its
+            // runtime frame count only while that display style is effective.
+            if(arg0 == ITEM_0_HOURGLASS_TIMER &&
+               port_betaHourglassDisplayRestored() &&
+               arg1->unk50 != 0){
+                BKSprite *sprite = (BKSprite *)arg1->unk50;
+
+                if(sprite->frameCnt > 0 && sprite->frames[0] != 0){
+                    arg1->unk2C = sprite->frameCnt;
+                }
+                else{
+                    assetCache_free((void *)arg1->unk50);
+                    arg1->unk50 = (uintptr_t)assetcache_get(ASSET_6DA_SPRITE_HOURGLASS);
+                    arg1->unk24 = ASSET_6DA_SPRITE_HOURGLASS;
+                    arg1->unk2C = 0x16;
+                    arg1->unk60 = 0.0f;
+                }
+            }
         }
        
         if(arg0 == 0){

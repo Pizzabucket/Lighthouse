@@ -13,6 +13,7 @@
 #include "variables.h"
 #include "enums.h"
 
+
 namespace LighthouseGui {
 
 extern std::shared_ptr<LighthouseMenu> mLighthouseMenu;
@@ -143,6 +144,10 @@ void LighthouseMenu::AddMenuDevTools() {
     } kAttractDemos[] = {
         { "Mumbo's Mountain", 0 }, { "Inside Clanker", 1 }, { "Bubblegloop Swamp", 2 }, { "MMM Church", 3 },
         { "Nipper's Shell", 5 },   { "CCW Winter", 6 },     { "RBB Engine Room", 7 },   { "Gobi's Valley", 8 },
+        { "Freezeezy Peak (Unused)", 11 },
+        { "RBB Captain's Cabin (Unused)", 12 },
+        { "Gruntilda's Lair (Unused)", 13 },
+        { "Spiral Mountain (Unused)", 14 },
     };
     for (const auto& d : kAttractDemos) {
         AddWidget(path, fmt::format("{}", d.name), WIDGET_BUTTON)

@@ -9,6 +9,22 @@ bool chCollectible_collectItem(Actor*, enum file_progress_e, enum asset_e, enum 
 Actor *chCollectible_draw(ActorMarker *this, Gfx **gdl, Mtx **mptr, Vtx **arg3);
 void chCollectible_update(Actor *this);
 
+// Unused FP demo: track red-feather pickup events for route repair.
+static s32 sFpDemoRedFeatherPickupCount = 0;
+
+void port_fpDemoRedFeatherRepairReset(void){
+    sFpDemoRedFeatherPickupCount = 0;
+}
+// "Down" means down on the screen/roof, NOT world Y.
+// Move horizontally toward the current camera while preserving Y.
+// Use the raw position setter so floor/collision state is not refreshed.
+    // Start the short stick-input nudge used by the unused FP demo repair.
+static void port_fpDemoMoveDownAfterThirdRedFeather(void){
+    // Block-scope prototype keeps this edit self-contained.
+    extern void port_fpDemoThirdFeatherStickNudgeStart(void);
+    port_fpDemoThirdFeatherStickNudgeStart();
+}
+
 /* .data */
 extern ActorInfo chBlueEgg = {
     MARKER_60_BLUE_EGG_COLLECTIBLE, ACTOR_52_BLUE_EGG, ASSET_36D_SPRITE_BLUE_EGG,
@@ -107,7 +123,19 @@ bool chCollectible_collectRedFeather(ActorProp *arg0){
     fxSparkle_redFeather(&arg0->x);
     if(arg0->isActorProp)
         actPtr = marker_getActor(arg0->marker);
-    chCollectible_collectItem(actPtr, FILEPROG_6_RED_FEATHER_TEXT, VER_SELECT(0xD9F, 0xA1D, 0, 0), COMUSIC_B_RED_FEATHER_COLLECTED, 0xF, 4.0f);
+    chCollectible_collectItem(actPtr, FILEPROG_6_RED_FEATHER_TEXT, VER_SELECT(0xD9F, 0xA1D, 0, 0), COMUSIC_B_RED_FEATHER_COLLECTED, ITEM_F_RED_FEATHER, 4.0f);
+    // Count pickup EVENTS, not the inventory total: title demos begin with
+    // 50 red feathers already stocked for flight.
+    if((getGameMode() == GAME_MODE_7_ATTRACT_DEMO) &&
+       (gsworld_getMap() == MAP_27_FP_FREEZEEZY_PEAK)){
+        sFpDemoRedFeatherPickupCount++;
+
+        // Immediately after the third red-feather pickup, move Banjo
+        // slightly downward so the recorded route reaches feather #4.
+        if(sFpDemoRedFeatherPickupCount == 3){
+            port_fpDemoMoveDownAfterThirdRedFeather();
+        }
+    }
 }
 
 bool chCollectible_collectGoldFeather(ActorProp *arg0){

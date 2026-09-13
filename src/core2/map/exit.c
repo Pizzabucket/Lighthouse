@@ -15,6 +15,7 @@ typedef struct {
 }Struct_core2_C4320_0;
 
 s32 func_8034BAFC(void);
+extern s32 port_restoredTitleDemosEnabled(void);
 
 /* .data*/
 //EAF70:
@@ -29,7 +30,14 @@ extern Struct_core2_C4320_0 D_80371F00[] ={
     {MAP_34_RBB_ENGINE_ROOM,      4, 0x5B, 1, 2, 2},
     {MAP_12_GV_GOBIS_VALLEY,      7, 0x5B, 1, 2, 2},
     {MAP_1F_CS_START_RAREWARE,    1, 0x00, 1, 2, 2},
-    {MAP_91_FILE_SELECT,          0, 0x00, 1, 2, 2}
+    {MAP_91_FILE_SELECT,          0, 0x00, 1, 2, 2},
+    // Optional restored title-screen demos. The retail File Select sentinel remains index 10.
+    {MAP_27_FP_FREEZEEZY_PEAK,    4, 0x5B, 1, 2, 2},
+    {MAP_3F_RBB_CAPTAINS_CABIN,   7, 0x5F, 1, 2, 2},
+    {MAP_69_GL_MM_LOBBY,          4, 0x5B, 1, 2, 2},
+    {MAP_1_SM_SPIRAL_MOUNTAIN,    7, 0x5B, 1, 2, 2},
+    {MAP_1F_CS_START_RAREWARE,    1, 0x00, 1, 2, 2}
+
 };
 
 extern Struct_core2_C4320_0 D_80371F44[] = {
@@ -55,6 +63,7 @@ extern s32 D_80371F90 = 0x7; //bottles bonus demo count
 extern s32 D_80371F94 = 1;
 extern s32 D_80371F98 = 3;
 extern s32 D_80371F9C = 1;
+
 extern u16 D_80371FA0[] = { 
     FILEPROG_3_MUSIC_NOTE_TEXT, 
     FILEPROG_4_MUMBO_TOKEN_TEXT, 
@@ -129,8 +138,26 @@ void func_8034B3F0(s32 arg0) {
 
 
 void func_8034B474(void) {
-    D_80386114 = &D_80371F00[D_80386110];
-    D_80386110 = (D_80386110 + 1) % D_80371F8C;
+    s32 current_index = D_80386110;
+
+    D_80386114 = &D_80371F00[current_index];
+
+    // Retail demos use indices 0..9. Restored demos use 11..14, with a title return at 15.
+    if (current_index >= D_80371F8C + 1 && current_index <= D_80371F8C + 4) {
+        if (port_restoredTitleDemosEnabled()) {
+            D_80386110 = current_index + 1;
+        } else {
+            // Direct Dev Tools launches still return safely to the title screen when the option is off.
+            D_80386110 = D_80371F8C + 5;
+        }
+    } else if (current_index == D_80371F8C + 5) {
+        D_80386110 = 0;
+    } else if (current_index == D_80371F8C - 1 && port_restoredTitleDemosEnabled()) {
+        // Continue from the second retail title screen into the restored demos.
+        D_80386110 = D_80371F8C + 1;
+    } else {
+        D_80386110 = (current_index + 1) % D_80371F8C;
+    }
 }
 
 void func_8034B4E4(s32 arg0){
@@ -216,7 +243,7 @@ void func_8034B834(void) {
 }
 
 void func_8034B8C0(enum map_e map_id, s32 demo_id) {
-    demo_load(map_id,demo_id);
+    demo_load(map_id, demo_id);
     D_80386118 = D_8038611C = 0;
     if (D_80386114->unk1 == 6) {
         volatileFlag_set(VOLATILE_FLAG_1F_IN_CHARACTER_PARADE, 1);
@@ -238,6 +265,7 @@ void func_8034B968(void){
     func_8034B2B0(D_80386110);
     func_8034B474();
 }
+
 
 void func_8034B994(void){
     func_8034B2B0(D_80371F8C);
@@ -336,6 +364,19 @@ void func_8034BB90(void) {
             func_8034B994();
         } else {
             func_802E412C(1, D_80386114->unk4);
+
+            // If the option is disabled mid-sequence, finish the active demo and skip the rest.
+            if (!port_restoredTitleDemosEnabled()) {
+                if (D_80386114 >= &D_80371F00[D_80371F8C + 1] &&
+                    D_80386114 <= &D_80371F00[D_80371F8C + 4]) {
+                    D_80386110 = D_80371F8C + 5;
+                } else if (D_80386114 == &D_80371F00[D_80371F8C - 1] &&
+                           D_80386110 == D_80371F8C + 1) {
+                    // If disabled during the second retail title screen, skip the restored demos.
+                    D_80386110 = 0;
+                }
+            }
+
             func_8034B2B0(D_80386110);
             func_8034B474();
         }
@@ -372,6 +413,12 @@ s32 func_8034BDA4(enum map_e map_id, s32 exit_id) {
     for(phi_v0 = 0; phi_v0 < D_80371F98; phi_v0++){
         if( map_id == D_80371F78[phi_v0].unk0 && exit_id == D_80371F78[phi_v0].unk2){
             return D_80371F78[phi_v0].unk3;
+        }
+    }
+    // Include restored demo descriptors for transition lookups and direct Dev Tools launches.
+    for(phi_v0 = D_80371F8C + 1; phi_v0 <= D_80371F8C + 4; phi_v0++){
+        if( map_id == D_80371F00[phi_v0].unk0 && exit_id == D_80371F00[phi_v0].unk2){
+            return D_80371F00[phi_v0].unk3;
         }
     }
 

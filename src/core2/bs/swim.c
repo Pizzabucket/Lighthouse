@@ -7,6 +7,8 @@
 #include "core2/yaw.h"
 
 extern void bainput_setDiveCooldown(s32, f32);
+extern s32 port_restoreBetaOilyWaterTextEnabled(void);
+extern s32 port_restoreBetaCCWIcyWaterTextEnabled(void);
 
 bool bsswim_inset(enum bs_e state_id);
 
@@ -76,9 +78,31 @@ void __bsswim_updateVelocity(void) {
 
 void __bsswim_enteredWater(void) {
     if (level_get() == LEVEL_9_RUSTY_BUCKET_BAY) {
-        progressDialog_showDialogMaskZero(FILEPROG_AB_SWIM_OILY_WATER);
+        if (port_restoreBetaOilyWaterTextEnabled()) {
+            // Use the normal saved retail flag as the canonical one-shot gate.
+            // This prevents switching the option from making Gruntilda say both versions.
+            if (!fileProgressFlag_get(FILEPROG_AB_SWIM_OILY_WATER)) {
+                progressDialog_setAndTriggerDialog_0(VOLATILE_FLAG_9E_BETA_OILY_SCUM);
+                if (volatileFlag_get(VOLATILE_FLAG_9E_BETA_OILY_SCUM)) {
+                    fileProgressFlag_set(FILEPROG_AB_SWIM_OILY_WATER, 1);
+                }
+            }
+        } else {
+            progressDialog_showDialogMaskZero(FILEPROG_AB_SWIM_OILY_WATER);
+        }
     } else if (gsworld_getMap() == MAP_46_CCW_WINTER) {
-        progressDialog_showDialogMaskZero(FILEPROG_DD_HAS_TOUCHED_CCW_ICY_WATER);
+        if (port_restoreBetaCCWIcyWaterTextEnabled()) {
+            // Share the retail saved flag so switching the option later
+            // cannot make Gruntilda say both the beta and retail versions.
+            if (!fileProgressFlag_get(FILEPROG_DD_HAS_TOUCHED_CCW_ICY_WATER)) {
+                progressDialog_setAndTriggerDialog_0(VOLATILE_FLAG_9F_BETA_DIVE_IN_ICY_WATER);
+                if (volatileFlag_get(VOLATILE_FLAG_9F_BETA_DIVE_IN_ICY_WATER)) {
+                    fileProgressFlag_set(FILEPROG_DD_HAS_TOUCHED_CCW_ICY_WATER, 1);
+                }
+            }
+        } else {
+            progressDialog_showDialogMaskZero(FILEPROG_DD_HAS_TOUCHED_CCW_ICY_WATER);
+        }
     }
     baphysics_set_gravity(100.0f);
     baphysics_set_terminal_velocity(133.33f);

@@ -254,6 +254,9 @@ void spawnQueue_reset(void){
     spawnableActorList_add(&chPiranhaWaterParticles, actor_new, ACTOR_FLAG_UNKNOWN_2);
     spawnableActorList_add(&chWadingBoots, actor_new, ACTOR_FLAG_NONE);
     spawnableActorList_add(&chEmptyHoneycomb, actor_new, ACTOR_FLAG_UNKNOWN_6 | ACTOR_FLAG_UNKNOWN_21); //chhoneycarrier
+    // Keep the shared ActorInfo at the retail marker. Individual honeycomb
+    // instances are rolled to dormant marker 0x54 in chHoneycomb_update().
+    chHoneycomb.markerId = MARKER_55_HONEYCOMB;
     spawnableActorList_add(&chHoneycomb, actor_new, ACTOR_FLAG_UNKNOWN_6 | ACTOR_FLAG_UNKNOWN_21); //chhoney
     spawnableActorList_add(&sumusicNote, actor_new, ACTOR_FLAG_UNKNOWN_21); //music_note
     spawnableActorList_add(&chBlueEgg, actor_new, ACTOR_FLAG_UNKNOWN_21); //egg

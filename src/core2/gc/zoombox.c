@@ -13,6 +13,8 @@
 
 extern void func_80344090(BKSpriteDisplayData *self, s32 frame, Gfx **gfx);
 BKSprite *codeB3A80_getSprite(enum asset_e sprite_id, BKSpriteDisplayData **arg1);
+extern s32 port_restoreBetaEmptyHoneycombIconEnabled(void);
+
 
 typedef struct struct_18_s{
     s16 sfx_id; /* enum sfx_e */
@@ -1371,7 +1373,15 @@ void gczoombox_update(GcZoombox *this){
 }
 
 void __gczoombox_load_sprite(GcZoombox *this, GcZoomboxSprite portrait_id){
-     this->unkF8 = codeB3A80_getSprite(D_8036C6C0[portrait_id].spite_id, &this->unkFC);
+     s32 sprite_id = D_8036C6C0[portrait_id].spite_id;
+
+     // The empty-honeycomb talking portrait uses the unused beta sprite when enabled.
+     if(portrait_id == ZOOMBOX_SPRITE_2D_EXTRA_HEALTH_MAX
+        && port_restoreBetaEmptyHoneycombIconEnabled()){
+          sprite_id = 0x811;
+     }
+
+     this->unkF8 = codeB3A80_getSprite(sprite_id, &this->unkFC);
      this->frame_count = this->unkF8->frameCnt;
      codeAEDA0_setSpriteDrawMode(-1);
      
@@ -1730,7 +1740,9 @@ bool func_80318964(GcZoombox *this) {
 
 bool gczoombox_loadSprite(GcZoombox *this, GcZoomboxSprite arg1){
      if( this == NULL
-         || arg1 == this->portrait_id
+         // Let this portrait reload at the same ID so a live option change can swap its sprite.
+         || (arg1 == this->portrait_id
+             && arg1 != ZOOMBOX_SPRITE_2D_EXTRA_HEALTH_MAX)
          || ( this->state != 6
               && this->state != 0xa
               && this->state != 0xb

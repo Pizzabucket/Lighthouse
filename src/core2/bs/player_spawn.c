@@ -8,6 +8,8 @@
 #include "core2/ba/anim.h"
 #include "core2/ba/physics.h"
 
+extern f32 port_getShortGameOverFadeDelay(void);
+
 extern void controller_getJoystick(s32, f32*);
 extern f32 player_getYaw(void);
 extern ParticleEmitter *func_802F4094(f32 pos[3], f32 arg1);
@@ -315,7 +317,7 @@ void func_8029B62C(void){
             func_8025A2B0();
             func_802DC528(0, 0);
             func_80324C58();
-            timedFunc_set_0(5.0f, func_8029B5EC);
+            timedFunc_set_0(port_getShortGameOverFadeDelay(), func_8029B5EC);
         }
         else{
             func_802E412C(1, 0);

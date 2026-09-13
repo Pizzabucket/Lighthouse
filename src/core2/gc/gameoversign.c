@@ -6,12 +6,14 @@
 
 
 extern void actor_postdrawMethod(ActorMarker *);
+extern s32 port_getGameOverSignMusicTrack(void);
 
 Actor *func_802DC320(ActorMarker *marker, Gfx **gfx, Mtx **mtx, Vtx **vtx);
 void gcGameOverSign_update(Actor *this);
 
 /* .data */
 f32 D_80368040[3] = {0.0f, 0.0f, 0.0f};
+s32 sGameOverSignMusicTrack = COMUSIC_31_GAME_OVER;
 
 ActorInfo gcGameOverSign = {
     MARKER_174_GAME_OVER, ACTOR_1DB_GAME_OVER, ASSET_54C_MODEL_GAME_OVER, 
@@ -60,7 +62,7 @@ Actor *func_802DC320(ActorMarker *marker, Gfx **gfx, Mtx **mtx, Vtx **vtx){
 
 void gcGameOverSign_free(Actor * this){
     D_8037DE40 = NULL;
-    func_8025A7DC(COMUSIC_31_GAME_OVER);
+    func_8025A7DC(sGameOverSignMusicTrack);
 }
 
 void gcGameOverSign_update(Actor *this){
@@ -81,7 +83,8 @@ void gcGameOverSign_spawn(void) {
         D_8037DE40 = actor->marker;
         func_8025A58C(0, 5000);
         func_8025AB00();
-        coMusicPlayer_playMusic(COMUSIC_31_GAME_OVER, -1);
+        sGameOverSignMusicTrack = port_getGameOverSignMusicTrack();
+        coMusicPlayer_playMusic(sGameOverSignMusicTrack, -1);
     }
 }
 
@@ -93,8 +96,8 @@ void func_802DC528(NodeProp *arg0, ActorMarker *arg1){
 
 void func_802DC560(NodeProp *arg0, ActorMarker *arg1){
     if(D_8037DE40 != NULL){
-        comusic_8025AB44(COMUSIC_31_GAME_OVER, 0, 200);
-        func_8025AABC(COMUSIC_31_GAME_OVER);
+        comusic_8025AB44(sGameOverSignMusicTrack, 0, 200);
+        func_8025AABC(sGameOverSignMusicTrack);
         func_80326310(marker_getActor(D_8037DE40));
     }
 }

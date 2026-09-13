@@ -7,6 +7,8 @@
 #include "DevSequences.h"
 #include "port/Enhancements/Events/Hooks/Events.h"
 #include "port/ShipInit.hpp"
+#include <libultraship/bridge.h>
+#include "port/UI/cvar_prefixes.h"
 #include <spdlog/spdlog.h>
 
 extern "C" {
@@ -28,6 +30,35 @@ void timedFunc_set_1(float time, void (*func)(int), int arg); // queue a 1-arg d
 void func_80311714(int next_state);                           // set g_Dialog.unk128_3 (parade-credit persist flag)
 }
 
+extern "C" int port_restoredTitleDemosEnabled(void) {
+    return CVarGetInteger(CVAR_ENHANCEMENT("Restorations.RestoredTitleDemos"), 0) != 0;
+}
+extern "C" int port_restoreUnusedXmasTreeTimerEnabled(void) {
+    return CVarGetInteger(CVAR_ENHANCEMENT("Restorations.UnusedXmasTreeTimer"), 0) != 0;
+}
+extern "C" int port_restoreBetaHourglassEnabled(void) {
+    return CVarGetInteger(CVAR_ENHANCEMENT("Restorations.BetaHourglassTimer"), 0) != 0;
+}
+
+extern "C" int port_restoreBetaEmptyHoneycombIconEnabled(void) {
+    return CVarGetInteger(CVAR_ENHANCEMENT("Restorations.BetaEmptyHoneycombIcon"), 0) != 0;
+}
+
+extern "C" int port_restoreBetaOilyWaterTextEnabled(void) {
+    return CVarGetInteger(CVAR_ENHANCEMENT("Restorations.BetaOilyWaterText"), 0) != 0;
+}
+
+extern "C" int port_restoreBetaCCWIcyWaterTextEnabled(void) {
+    return CVarGetInteger(CVAR_ENHANCEMENT("Restorations.BetaCCWIcyWaterText"), 0) != 0;
+}
+
+extern "C" int port_restoreUnusedRandomHoneycombsEnabled(void) {
+    const int gameMode = getGameMode();
+    if (gameMode == GAME_MODE_6_FILE_PLAYBACK || gameMode == GAME_MODE_7_ATTRACT_DEMO) {
+        return 0;
+    }
+    return CVarGetInteger(CVAR_ENHANCEMENT("Restorations.UnusedRandomHoneycombs"), 0) != 0;
+}
 namespace Lighthouse {
 namespace DevTools {
 
@@ -42,6 +73,7 @@ void RequestCutsceneMap(int mapId) {
     sPendingMap = mapId;
     sPending = SEQ_CUTSCENE_MAP;
 }
+
 
 void RegisterDevSequences_Init() {
     REGISTER_LISTENER(GameFrameUpdate, EVENT_PRIORITY_NORMAL, [](IEvent*) {
@@ -90,6 +122,7 @@ void RegisterDevSequences_Init() {
             case SEQ_CUTSCENE_MAP:
                 transitionToMap((enum map_e)sPendingMap, 0, 1);
                 break;
+
             default:
                 D_80386110 = seq - SEQ_ATTRACT_BASE;
                 func_8034B968();

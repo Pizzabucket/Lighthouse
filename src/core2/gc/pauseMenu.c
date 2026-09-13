@@ -46,6 +46,7 @@ extern void func_8025A430(s32, s32, s32);
 extern void print_setBoldFontTexture(enum asset_e);
 extern void print_resetBoldFontTexture(void);
 extern void code_73640_printItemCount(enum item_e);
+extern f32 port_getShortGameOverScreenFadeDelay(void);
 
 // [port] JP pause-menu world-name banner
 extern s32 port_pauseBannerUpdate(s32 page_id);
@@ -806,6 +807,11 @@ void gcpausemenu_init(void) {
     for (i = 0; i < 0xC; i++) {
         func_802FAD64(D_8036C60C[i]);
     }
+
+    // Retail explicitly hides ITEM_0_HOURGLASS_TIMER when pause opens.
+    // ITEM_5 is an unused timer in retail, so add it to the same hide path.
+    func_802FAD64(ITEM_5_XMAS_TREE_TIMER);
+
     func_802FBB18();
     sp24 = sns_get_item_state(6, 0);
     sp28 = sns_get_item_state(5, 0);
@@ -1371,7 +1377,7 @@ s32 gcPauseMenu_update(void) {
 
         case PAUSE_STATE_14_EXIT_GAME:
             func_802DC5B8();
-            if (5.0 < D_80383010.unkC) {
+            if (port_getShortGameOverScreenFadeDelay() < D_80383010.unkC) {
                 if (!D_80383010.unk3_6) {
                     func_802DC560(0, 0);
                     func_802E412C(1, 0);

@@ -410,7 +410,79 @@ void LighthouseMenu::AddMenuEnhancements() {
         })
         .Options(CheckboxOptions().Tooltip("Restores the unused Return to Lair option when in Worlds."));
 
-    // Enhancements -> Gameplay
+    AddWidget(path, "Restore Spaceworld Mumbo's Mountain Music", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Restorations.SpaceworldMusic"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Restores the Spaceworld-era Mumbo's Mountain music variations in supported areas."));
+
+    // Keep this restoration at the bottom of the Restorations list.
+    path.column = SECTION_COLUMN_1;
+
+    AddWidget(path, "Restore Short Game Over Theme", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Restorations.ShortGameOverTheme"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Restores the unused shorter Game Over theme for the simple Game Over screen. "
+            "The full Gruntilda Game Over cutscene is unchanged."));
+    AddWidget(path, "Restore Unused Title-Screen Demos", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Restorations.RestoredTitleDemos"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            if (mLighthouseMenu->disabledMap.at(DISABLE_FOR_ROMHACK).active) {
+                info.activeDisables.push_back(DISABLE_FOR_ROMHACK);
+            }
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Restores unused title screen demos. Some were most likely removed due to them being too short/incomplete."));
+
+    AddWidget(path, "Restore Unused Christmas Tree Timer", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Restorations.UnusedXmasTreeTimer"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            if (mLighthouseMenu->disabledMap.at(DISABLE_FOR_ROMHACK).active) {
+                info.activeDisables.push_back(DISABLE_FOR_ROMHACK);
+            }
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Restores the unused animated Christmas tree timer in Freezeezy Peak."));
+
+    AddWidget(path, "Restore Beta Hourglass Timer", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Restorations.BetaHourglassTimer"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            if (mLighthouseMenu->disabledMap.at(DISABLE_FOR_ROMHACK).active) {
+                info.activeDisables.push_back(DISABLE_FOR_ROMHACK);
+            }
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Restores the unused beta hourglass timer graphic."));
+    AddWidget(path, "Restore Beta Empty Honeycomb Icon", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Restorations.BetaEmptyHoneycombIcon"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            if (mLighthouseMenu->disabledMap.at(DISABLE_FOR_ROMHACK).active) {
+                info.activeDisables.push_back(DISABLE_FOR_ROMHACK);
+            }
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Restores the unused beta talking portrait for the empty honeycomb. This does not affect the empty honeycomb in the pause menu."));
+// Enhancements -> Gameplay
+    AddWidget(path, "Restore Beta Oily Water Text", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Restorations.BetaOilyWaterText"))
+        .Options(CheckboxOptions().Tooltip(
+            "Restores Gruntilda's unused beta dialogue for touching the oily water in Rusty Bucket Bay."));
+
+    AddWidget(path, "Restore Beta Icy Water Text", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Restorations.BetaCCWIcyWaterText"))
+        .Options(CheckboxOptions().Tooltip(
+            "Restores Gruntilda's unused beta dialogue for touching the icy water in Click Clock Wood."));
+
+    AddWidget(path, "Restore Unused Random Honeycombs", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Restorations.UnusedRandomHoneycombs"))
+        .Options(CheckboxOptions().Tooltip(
+            "It has a random chance to spawn while looking identical to a regular honeycomb. Collecting one starts a health roulette that randomly changes Banjo's health. After changing this option, reload the map so the honeycombs use the new setting."));
+
     path = { "Enhancements", "Gameplay", SECTION_COLUMN_1 };
     AddSidebarEntry("Enhancements", path.sidebarName, 2);
     path.column = SECTION_COLUMN_1;

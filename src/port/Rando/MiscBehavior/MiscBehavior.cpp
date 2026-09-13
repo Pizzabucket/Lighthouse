@@ -21,6 +21,24 @@ static void FinishPortraitCrossfade(GcZoombox* zoombox) {
     zoombox->unk17C = 0.0f;
 }
 
+extern "C" void timedFunc_set_0(float time, void (*funcPtr)(void));
+
+static bool sRandoHookRefreshPending = false;
+
+static void RefreshRandoHooksDeferred(void) {
+    sRandoHookRefreshPending = false;
+    ShipInit::Init("IS_RANDO");
+}
+
+static void port_deferRandoHookRefresh(void) {
+    if (sRandoHookRefreshPending) {
+        return;
+    }
+
+    sRandoHookRefreshPending = true;
+    timedFunc_set_0(0.0f, RefreshRandoHooksDeferred);
+}
+
 void RegisterMiscBehaviour() {
     REGISTER_LISTENER(OnFileSelectPortrait, EVENT_PRIORITY_NORMAL, [](IEvent* event) {
         OnFileSelectPortrait* ev = (OnFileSelectPortrait*)event;
@@ -46,7 +64,7 @@ void RegisterMiscBehaviour() {
         Rando::Logic::shuffledPool.clear();
     });
 
-    REGISTER_LISTENER(OnGameStart, EVENT_PRIORITY_NORMAL, [](IEvent* event) { ShipInit::Init("IS_RANDO"); });
+    // Do not rebuild the IS_RANDO hook set from inside EventSystem::CallEvent.    // Many IS_RANDO init functions register/unregister event listeners, so doing    // that while OnGameStart listeners are being iterated can invalidate the    // event listener container. Queue the refresh for the timed-function pass    // after this event dispatch has returned instead.    REGISTER_LISTENER(OnGameStart, EVENT_PRIORITY_NORMAL, [](IEvent* event) {        port_deferRandoHookRefresh();    });
 
     REGISTER_LISTENER(OnSaveLoad, EVENT_PRIORITY_NORMAL, [](IEvent* event) {
         OnSaveLoad* ev = (OnSaveLoad*)event;

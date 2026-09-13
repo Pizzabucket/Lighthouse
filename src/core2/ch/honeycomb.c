@@ -10,6 +10,7 @@ typedef struct{
 }ActorLocal_EmptyHoneycomb;
 
 void chHoneycomb_update(Actor *this);
+extern s32 port_restoreUnusedRandomHoneycombsEnabled(void);
 
 /* .data */
 ActorInfo chEmptyHoneycomb = {
@@ -98,9 +99,19 @@ void chHoneycomb_update(Actor *this){
     ActorLocal_EmptyHoneycomb *local = (ActorLocal_EmptyHoneycomb *)&this->local;
     ActorMarker **tmp_v0;
     int i;
+    f32 spawnRoll;
 
     if(!this->initialized){
-        this->lifetime_value = (randf() < 0.5) ? 200.0 : -200.0;
+        // Reuse vanilla's existing spin-direction RNG roll so this restoration
+        // does not consume an extra random number or disturb the global RNG sequence.
+        spawnRoll = randf();
+        this->lifetime_value = (spawnRoll < 0.5f) ? 200.0f : -200.0f;
+        if (this->marker->id == MARKER_55_HONEYCOMB
+            && port_restoreUnusedRandomHoneycombsEnabled()
+            && spawnRoll < 0.1f
+        ){
+            this->marker->id = 0x54;
+        }
         this->initialized = true;
         if( this->marker->id == MARKER_53_EMPTY_HONEYCOMB){
             if(local->uid == 0)

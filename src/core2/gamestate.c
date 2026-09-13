@@ -26,6 +26,9 @@ f32 D_80386000[0xE]; //timescores
 s32 D_80386038;
 
 bool func_80347A4C(void);
+extern void port_xmasTreeTimerUpdate(void);
+extern void port_betaHourglassUpdate(void);
+extern s32 port_betaHourglassSwitching(void);
 
 /* .code */
 void func_80345EB0(enum item_e item){
@@ -350,10 +353,20 @@ void func_803465E4(void){
     if(!volatileFlag_get(VOLATILE_FLAG_BF)){
         for(i = 0; i < 6; i++){
             if(D_80385F30[ITEM_6_HOURGLASS + i]){
+                // During a live retail<->beta HUD swap, manager.c owns ITEM_0's
+                // countdown and HUD state. Keep ITEM_6 TRUE for gameplay, but
+                // skip this one automatic pass so it cannot reopen the old HUD.
+                if(i == 0 && port_betaHourglassSwitching()){
+                    continue;
+                }
+
                 func_80345EB0(ITEM_0_HOURGLASS_TIMER + i);
             }
         }
     }//L80346A2C
+
+    port_xmasTreeTimerUpdate();
+    port_betaHourglassUpdate();
 
     if( getGameMode() != GAME_MODE_4_PAUSED
         && func_8028F070()

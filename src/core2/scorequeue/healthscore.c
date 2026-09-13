@@ -158,6 +158,7 @@ void fxhealthscore_update(enum item_e item_id, struct8s *arg1) {
     f32 temp_f20;
     s32 var_s0;
     s32 sp2C;
+    s32 rouletteHealthRange;
 
 
     temp_f20 = time_getDelta();
@@ -168,6 +169,12 @@ void fxhealthscore_update(enum item_e item_id, struct8s *arg1) {
         gTotalHealth = item_getCount(ITEM_15_HEALTH_TOTAL);
     }
 
+    // gTotalHealth is the number of HUD honeycomb slots. With Double
+    // Health it is intentionally half of ITEM_15_HEALTH_TOTAL so the
+    // red overlay can represent health 9-16. The unused roulette must
+    // use the real health total instead of the halved HUD slot count.
+    rouletteHealthRange = item_getCount(ITEM_15_HEALTH_TOTAL);
+
     switch (D_80381EF0) {
         case 0:
             gHealth = (f32) itemPrint_getValue(item_id);
@@ -175,8 +182,8 @@ void fxhealthscore_update(enum item_e item_id, struct8s *arg1) {
 
         case 1:
             gHealth += temp_f20 * 10.0f;
-            if (gTotalHealth <= gHealth) {
-                gHealth = gHealth - gTotalHealth;
+            if (rouletteHealthRange <= gHealth) {
+                gHealth = gHealth - rouletteHealthRange;
             }
             D_80381F28 += temp_f20;
             if (D_80381F28 > 2.5) {
@@ -188,11 +195,11 @@ void fxhealthscore_update(enum item_e item_id, struct8s *arg1) {
         case 2:
             if (sp2C != 1) {
                 gHealth += temp_f20 * 10.0f;
-                if (gTotalHealth <= gHealth) {
-                    gHealth = gHealth - gTotalHealth;
+                if (rouletteHealthRange <= gHealth) {
+                    gHealth = gHealth - rouletteHealthRange;
                 }
             }
-            if (randf2(0.0f, 1.0f) < (1.0 / gTotalHealth)) {
+            if (randf2(0.0f, 1.0f) < (1.0 / rouletteHealthRange)) {
                 if (gHealth < 1.0f) {
                     gHealth =gHealth + 1.0;
                 }

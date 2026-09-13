@@ -831,6 +831,14 @@ void func_80310D2C(void){
                 else
                     func_802FAD64(ITEM_0_HOURGLASS_TIMER);
             }
+            // ITEM_5 now uses the retail timer queue, so reuse the same
+            // invisible 0x28 spacer that raises the hourglass during dialog.
+            else if(func_802FADD4(ITEM_5_XMAS_TREE_TIMER)){
+                if(item_getCount(ITEM_B_XMAS_TREE) != 0)
+                    code_73640_printItemCount(0x28);
+                else
+                    func_802FAD64(ITEM_5_XMAS_TREE_TIMER);
+            }
             else {
                 if(func_802FADD4(3)){
                     if(item_getCount(ITEM_3_PROPELLOR_TIMER) != 0){

@@ -14,6 +14,7 @@ typedef struct {
 
 Actor *chXmasTreeStar_draw(ActorMarker *marker, Gfx **gfx, Mtx **mtx, Vtx **vtx);
 void chXmasTreeStar_update(Actor *this);
+extern s32 port_xmasTreeTimerEmpty(void);
 
 /* .data */
 ActorInfo D_80392470 = { 0x207, 0x339, 0x426, 
@@ -111,7 +112,8 @@ void chXmasTreeStar_update(Actor *this){
 
         case 2://L8038EF5C
             if(!local->unk1A) return;
-            if(item_empty(ITEM_6_HOURGLASS)){
+            // The shared timer manager keeps the countdown valid while the HUD style is switching.
+            if(port_xmasTreeTimerEmpty()){
                 subaddie_set_state(this, 1);
             }
             else{

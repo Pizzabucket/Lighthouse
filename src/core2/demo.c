@@ -25,14 +25,28 @@ typedef struct demo_file_header{
 
 
 void demo_free(void);
+extern void port_fpDemoRedFeatherRepairReset(void);
 
 DemoInput D_80371EF0 = {0, 0, 0, 2, 0};
 
+
+// Unused FP demo: short stick-input nudge after the third red feather.
+static s32 sFpDemoThirdFeatherStickNudgeFrames = 0;
+
+void port_fpDemoThirdFeatherStickNudgeStart(void){
+    if((getGameMode() == GAME_MODE_7_ATTRACT_DEMO) &&
+       (gsworld_getMap() == MAP_27_FP_FREEZEEZY_PEAK)){
+        sFpDemoThirdFeatherStickNudgeFrames = 6;
+    }
+}
 /* .bss */
 DemoInput *D_803860D0; //demo_input_ptr
 DemoFileHeader * D_803860D4; //demo_file_ptr
 s32 D_803860D8;//current_input
 s32 D_803860DC;//total_inputs
+// The unused FP 0x5B recording begins with active controller data.
+// Do not consume that data while the loading/scene transition is still active.
+static bool sFpDemoHoldUntilLoaded = false;
 
 /* .code */
 s32 func_80349EC0(s32 arg0){
@@ -42,6 +56,24 @@ s32 func_80349EC0(s32 arg0){
 }
 
 int demo_readInput(OSContPad* arg0, s32* arg1){
+    // Normal attract demos contain neutral padding at the beginning, so
+    // consuming inputs during loading is harmless for them. The unused FP
+    // 0x5B recording starts immediately. Hold its input pointer at frame 0
+    // until the transition is finished, and feed a neutral controller frame.
+    if (sFpDemoHoldUntilLoaded) {
+        if (!gctransition_done()) {
+            arg0->stick_x = D_80371EF0.unk0;
+            arg0->stick_y = D_80371EF0.unk1;
+            arg0->button = D_80371EF0.unk2;
+            *arg1 = D_80371EF0.unk4;
+            return 1;
+        }
+
+        // Transition has finished. Release once and play the recording
+        // from its true first input on this same gameplay tick.
+        sFpDemoHoldUntilLoaded = false;
+    }
+
     s32 idx = D_803860D8;
     int not_eof = (idx + 1) < D_803860DC;
     DemoInput *input_ptr = not_eof ? &D_803860D0[idx] : &D_80371EF0;
@@ -57,6 +89,15 @@ int demo_readInput(OSContPad* arg0, s32* arg1){
 
     arg0->stick_x = input_ptr->unk0;
     arg0->stick_y = input_ptr->unk1;
+    // Apply the short unused-FP-demo stick nudge after the third red feather.
+    if(sFpDemoThirdFeatherStickNudgeFrames > 0){
+        s32 stickY = arg0->stick_y;
+        if(stickY > -45){
+            stickY = -30;
+        }
+        arg0->stick_y = (s8)stickY;
+        sFpDemoThirdFeatherStickNudgeFrames--;
+    }
     arg0->button = input_ptr->unk2;
     *arg1 = input_ptr->unk4;
 
@@ -96,9 +137,16 @@ u32 func_8034A054(void){
     return D_803860D8*sizeof(DemoInput);
 }
 
+
 void demo_load(enum map_e map, s32 demo_id){
+    sFpDemoThirdFeatherStickNudgeFrames = 0;
     if(D_803860D4)
         demo_free();
+    // All other demos keep their exact stock timing/input behavior.
+    sFpDemoHoldUntilLoaded =
+        (map == MAP_27_FP_FREEZEEZY_PEAK) && (demo_id == 0x5B);
+    port_fpDemoRedFeatherRepairReset();
+
     D_803860D4 = assetcache_get(0x504 + map_getLevel(map) + demo_id*0xD);
     func_80349FB0(D_803860D4->inputs, func_8033B678() - sizeof(DemoFileHeader), 0);
 }

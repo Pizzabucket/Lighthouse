@@ -23,6 +23,7 @@ typedef struct item_print_s{
 
 
 s32 func_802FAD9C(enum item_e item_id);
+extern s32 port_restoreUnusedXmasTreeTimerEnabled(void);
 
 /* .data */
 s16 D_803692E0[6] = {
@@ -51,7 +52,7 @@ ItemPrint D_803692F8[0x2C] = {
     { NF(fxcommon1score_new), UF(fxcommon1score_update), DF(fxcommon1score_draw), UF(fxcommon1score_free), 0, NULL }, //2
     { NF(fxcommon2score_new), UF(fxcommon2score_update), DF(fxcommon2score_draw), UF(fxcommon2score_free), 5, NULL }, //ITEM_3_PROPELLOR_TIMER
     { NF(fxcommon1score_new), UF(fxcommon1score_update), DF(fxcommon1score_draw), UF(fxcommon1score_free), 0, NULL }, //
-    { NF(fxcommon2score_new), UF(fxcommon2score_update), DF(fxcommon2score_draw), UF(fxcommon2score_free), 0, NULL }, //ITEM_5_XMAS_TREE_TIMER
+    { NF(fxcommon2score_new), UF(fxcommon2score_update), DF(fxcommon2score_draw), UF(fxcommon2score_free), 5, NULL }, //ITEM_5_XMAS_TREE_TIMER
     { NF(fxcommon1score_new), UF(fxcommon1score_update), DF(fxcommon1score_draw), UF(fxcommon1score_free), 0, NULL }, //ITEM_6_HOURGLASS
     { NF(fxcommon1score_new), UF(fxcommon1score_update), DF(fxcommon1score_draw), UF(fxcommon1score_free), 0, NULL }, //ITEM_7_SKULL_HOURGLASS
     { NF(fxcommon1score_new), UF(fxcommon1score_update), DF(fxcommon1score_draw), UF(fxcommon1score_free), 0, NULL }, //8
@@ -272,4 +273,312 @@ void func_802FAFD4(enum item_e item_id, enum sfx_e sfx_id){
 
 bool func_802FAFE8(enum item_e item_id){
     return func_802FCD98(D_803692F8[item_id].unk14);
+}
+// The Christmas-tree restoration can swap between the retail hourglass
+// and the dormant tree timer without resetting the challenge countdown.
+static s32 sPortXmasTreeTimerRunning = FALSE;
+static s32 sPortXmasTreeTimerRestored = FALSE;
+static s32 sPortXmasTreeTimerSwitching = FALSE;
+static s32 sPortXmasTreeTimerTargetRestored = FALSE;
+
+// These two HUD-style transitions share ITEM_0 and timer queue 5.
+// Never let both state machines own that queue at the same time.
+s32 port_betaHourglassSwitching(void);
+void port_betaHourglassSyncHiddenState(void);
+
+s32 port_xmasTreeTimerSwitching(void) {
+    return sPortXmasTreeTimerSwitching;
+}
+
+static enum item_e port_xmasTreeTimerItem(s32 restored) {
+    return restored ? ITEM_5_XMAS_TREE_TIMER : ITEM_0_HOURGLASS_TIMER;
+}
+
+static enum item_e port_xmasTreeTimerIndicator(s32 restored) {
+    return restored ? ITEM_B_XMAS_TREE : ITEM_6_HOURGLASS;
+}
+
+static void port_xmasTreeTimerSetWithoutHud(enum item_e item, s32 value) {
+    item_adjustByDiffWithoutHud(item, value - item_getCount(item));
+}
+
+void port_xmasTreeTimerStart(s32 ticks) {
+    enum item_e timer;
+    enum item_e indicator;
+    enum item_e otherTimer;
+    enum item_e otherIndicator;
+
+    sPortXmasTreeTimerRestored = port_restoreUnusedXmasTreeTimerEnabled() != 0;
+    sPortXmasTreeTimerTargetRestored = sPortXmasTreeTimerRestored;
+    sPortXmasTreeTimerSwitching = FALSE;
+    sPortXmasTreeTimerRunning = TRUE;
+
+    timer = port_xmasTreeTimerItem(sPortXmasTreeTimerRestored);
+    indicator = port_xmasTreeTimerIndicator(sPortXmasTreeTimerRestored);
+    otherTimer = port_xmasTreeTimerItem(!sPortXmasTreeTimerRestored);
+    otherIndicator = port_xmasTreeTimerIndicator(!sPortXmasTreeTimerRestored);
+
+    // Clear stale state from the unused style without opening its HUD.
+    port_xmasTreeTimerSetWithoutHud(otherIndicator, 0);
+    port_xmasTreeTimerSetWithoutHud(otherTimer, 0);
+
+    item_set(timer, ticks);
+    item_set(indicator, TRUE);
+}
+
+void port_xmasTreeTimerStop(void) {
+    enum item_e indicator;
+
+    if (!sPortXmasTreeTimerRunning) {
+        return;
+    }
+
+    indicator = port_xmasTreeTimerIndicator(sPortXmasTreeTimerRestored);
+
+    // Preserve the game's normal timer dismissal behavior when possible.
+    // During a style switch the indicator is already hidden, so avoid
+    // re-opening anything just to set it to zero again.
+    if (sPortXmasTreeTimerSwitching) {
+        port_xmasTreeTimerSetWithoutHud(indicator, 0);
+    } else {
+        item_set(indicator, FALSE);
+    }
+
+    sPortXmasTreeTimerRunning = FALSE;
+    sPortXmasTreeTimerSwitching = FALSE;
+}
+
+s32 port_xmasTreeTimerEmpty(void) {
+    if (!sPortXmasTreeTimerRunning) {
+        return TRUE;
+    }
+    return item_empty(port_xmasTreeTimerItem(sPortXmasTreeTimerRestored));
+}
+
+void port_xmasTreeTimerUpdate(void) {
+    s32 desired;
+    s32 remaining;
+    s32 diff;
+    enum item_e oldTimer;
+    enum item_e oldIndicator;
+    enum item_e newTimer;
+    enum item_e newIndicator;
+
+    if (!sPortXmasTreeTimerRunning) {
+        return;
+    }
+
+    desired = port_restoreUnusedXmasTreeTimerEnabled() != 0;
+
+        // If the beta hourglass is already animating out/in, let it finish first.
+    // The next frame observes the newest Christmas-tree checkbox state.
+    if (!sPortXmasTreeTimerSwitching && port_betaHourglassSwitching()) {
+        return;
+    }
+
+    if (!sPortXmasTreeTimerSwitching) {
+        if (desired == sPortXmasTreeTimerRestored) {
+            return;
+        }
+
+        sPortXmasTreeTimerTargetRestored = desired;
+        sPortXmasTreeTimerSwitching = TRUE;
+
+        oldTimer = port_xmasTreeTimerItem(sPortXmasTreeTimerRestored);
+        oldIndicator = port_xmasTreeTimerIndicator(sPortXmasTreeTimerRestored);
+
+        // Stop the generic timer loop from immediately re-opening this HUD.
+        port_xmasTreeTimerSetWithoutHud(oldIndicator, 0);
+
+        // A dialog raises timers by putting hidden item 0x28 at the front
+        // of timer queue 5. If it is present, dismiss that spacer first.
+        // Otherwise the old timer is not the queue head and cannot complete
+        // its normal slide-out cleanly.
+        if (func_802FADD4(0x28)) {
+            func_802FAD64(0x28);
+        }
+
+        // Now request the current timer's normal slide-off animation.
+        // If 0x28 was present it will leave first, then this timer becomes
+        // the queue head and continues sliding out.
+        func_802FAD64(oldTimer);
+        return;
+    }
+
+    // If the checkbox changes again while the old HUD is leaving,
+    // honor the newest setting when the replacement pops back in.
+    sPortXmasTreeTimerTargetRestored = desired;
+    oldTimer = port_xmasTreeTimerItem(sPortXmasTreeTimerRestored);
+
+    if (func_802FB0D4(D_803692F8[oldTimer].unk14) != 0) {
+        // The indicator is deliberately off during the slide-out, so the
+        // normal timer loop is no longer decrementing this item. Keep the
+        // countdown moving here with the same tick formula used by gamestate.
+        if (item_getCount(oldTimer) > 0) {
+            diff = (s32)(-time_getDelta() * (float)FRAMERATE * 1.1f);
+            if (diff < 0) {
+                item_adjustByDiffWithoutHud(oldTimer, diff);
+            }
+        }
+        return;
+    }
+
+    // The old timer is now completely off-screen.
+    remaining = item_getCount(oldTimer);
+    if (remaining <= 0) {
+        sPortXmasTreeTimerSwitching = FALSE;
+        return;
+    }
+
+    if (sPortXmasTreeTimerTargetRestored != sPortXmasTreeTimerRestored) {
+        // Move the exact remaining countdown to the selected timer.
+        port_xmasTreeTimerSetWithoutHud(oldTimer, 0);
+        sPortXmasTreeTimerRestored = sPortXmasTreeTimerTargetRestored;
+    }
+
+    newTimer = port_xmasTreeTimerItem(sPortXmasTreeTimerRestored);
+    newIndicator = port_xmasTreeTimerIndicator(sPortXmasTreeTimerRestored);
+
+        // If the tree is handing control back to ITEM_0, quietly apply the
+    // newest beta-hourglass style while ITEM_0 is still off-screen. This
+    // prevents ITEM_0 from popping in with one graphic and immediately
+    // starting a second slide-out on the same frame.
+    if (!sPortXmasTreeTimerRestored) {
+        port_betaHourglassSyncHiddenState();
+    }
+
+    // item_set() sends the selected timer through its normal state-1 pop-in.
+    item_set(newTimer, remaining);
+    item_set(newIndicator, TRUE);
+
+    sPortXmasTreeTimerSwitching = FALSE;
+}
+// When the beta-hourglass checkbox changes while ITEM_0 is visibly active,
+// let the current HUD use the normal timer-queue slide-out first. Only after
+// it is completely off-screen is the selected graphic changed and popped in.
+extern s32 port_restoreBetaHourglassEnabled(void);
+
+static s32 sPortBetaHourglassDisplayRestored = FALSE;
+static s32 sPortBetaHourglassSwitching = FALSE;
+static s32 sPortBetaHourglassTargetRestored = FALSE;
+
+s32 port_betaHourglassDisplayRestored(void) {
+    return sPortBetaHourglassDisplayRestored;
+}
+
+// gamestate.c uses this only to suppress ITEM_0's automatic HUD reopen.
+// ITEM_6 stays TRUE so minigames still know the timer is active.
+s32 port_betaHourglassSwitching(void) {
+    return sPortBetaHourglassSwitching;
+}
+
+// The Christmas-tree switch calls this only while ITEM_0 is fully hidden.
+// It updates the effective hourglass graphic without starting another HUD
+// transition or touching the timer count / gameplay indicator.
+void port_betaHourglassSyncHiddenState(void) {
+    s32 desired;
+
+    if (sPortBetaHourglassSwitching) {
+        return;
+    }
+
+    desired = port_restoreBetaHourglassEnabled() != 0;
+    sPortBetaHourglassDisplayRestored = desired;
+    sPortBetaHourglassTargetRestored = desired;
+}
+
+void port_betaHourglassUpdate(void) {
+    s32 desired;
+    s32 remaining;
+    s32 diff;
+    s32 timerActive;
+
+    desired = port_restoreBetaHourglassEnabled() != 0;
+
+        // ITEM_0 and the Christmas-tree timer share the same timer queue.
+    // If the tree transition owns it, do not begin/continue a second
+    // hourglass-style transition on top of it.
+    if (port_xmasTreeTimerSwitching()) {
+        return;
+    }
+
+    if (!sPortBetaHourglassSwitching) {
+        timerActive =
+            item_getCount(ITEM_0_HOURGLASS_TIMER) > 0 &&
+            item_getCount(ITEM_6_HOURGLASS) != 0;
+
+        if (!timerActive) {
+            // Do not change the effective graphic in the middle of some other
+            // queue-driven slide-out (for example the Christmas-tree switch).
+            // Once ITEM_0 is no longer in the queue, quietly sync to the option.
+            if (!func_802FADD4(ITEM_0_HOURGLASS_TIMER)) {
+                sPortBetaHourglassDisplayRestored = desired;
+                sPortBetaHourglassTargetRestored = desired;
+            }
+            return;
+        }
+
+        if (desired == sPortBetaHourglassDisplayRestored) {
+            return;
+        }
+
+        sPortBetaHourglassTargetRestored = desired;
+        sPortBetaHourglassSwitching = TRUE;
+
+        // IMPORTANT: keep ITEM_6_HOURGLASS TRUE. Many minigames treat that
+        // indicator as "the timer is active" and fail immediately if it is 0.
+        // gamestate.c suppresses only ITEM_0's normal HUD/countdown pass while
+        // this transition is active; this function keeps the countdown moving.
+
+        // A dialog raises timers by placing hidden spacer 0x28 at the front of
+        // this queue. Dismiss it first so the timer itself can become the queue head.
+        if (func_802FADD4(0x28)) {
+            func_802FAD64(0x28);
+        }
+
+        // Use the normal timer HUD slide-down.
+        func_802FAD64(ITEM_0_HOURGLASS_TIMER);
+        return;
+    }
+
+    // If the checkbox changes again while the old graphic is leaving,
+    // the most recent setting is what will pop back up.
+    sPortBetaHourglassTargetRestored = desired;
+
+    if (func_802FB0D4(D_803692F8[ITEM_0_HOURGLASS_TIMER].unk14) != 0) {
+        // gamestate suppresses ITEM_0's normal timer pass only while this
+        // HUD transition is active. Keep the real timer count moving here.
+        if (item_getCount(ITEM_0_HOURGLASS_TIMER) > 0) {
+            f32 dt = time_getDelta();
+
+            // Match the stock Bottles Bonus timer-consistency special case.
+            if (getGameMode() == GAME_MODE_8_BOTTLES_BONUS) {
+                dt = 1.0f / 30.0f;
+            }
+
+            diff = (s32)(-dt * (float)FRAMERATE * 1.1f);
+            if (diff < 0) {
+                item_adjustByDiffWithoutHud(ITEM_0_HOURGLASS_TIMER, diff);
+            }
+        }
+        return;
+    }
+
+    // The old graphic is now completely off-screen.
+    remaining = item_getCount(ITEM_0_HOURGLASS_TIMER);
+    if (remaining <= 0) {
+        sPortBetaHourglassDisplayRestored = sPortBetaHourglassTargetRestored;
+        sPortBetaHourglassSwitching = FALSE;
+        return;
+    }
+
+    // Only now allow common2score to select the other graphic.
+    sPortBetaHourglassDisplayRestored = sPortBetaHourglassTargetRestored;
+
+    // Re-enter through the normal item HUD state so the replacement uses
+    // the same pop-up animation as the Christmas-tree style switch.
+    item_set(ITEM_0_HOURGLASS_TIMER, remaining);
+
+    // ITEM_6 never changed, so gameplay never sees a false timer-expired state.
+    sPortBetaHourglassSwitching = FALSE;
 }
